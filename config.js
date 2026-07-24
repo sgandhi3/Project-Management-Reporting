@@ -1,3 +1,10 @@
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UI_CONFIG_PATH = path.join(__dirname, 'ui-config.json');
+const uiConfig = existsSync(UI_CONFIG_PATH) ? JSON.parse(readFileSync(UI_CONFIG_PATH, 'utf8')) : null;
+
 // ─── ADO field definitions ─────────────────────────────────────────────────────
 //
 // Shared across all ADO query blocks. Add a field here and expose it via
@@ -66,10 +73,10 @@ export const ZEPHYR_STATUS_MAP = {
 // One entry per workstream. The name is used as the key everywhere — in the data
 // object, in variables.js (d.stats.PDM), and in the snapshot printout.
 //
-// Fill in only the fields for the provider you're using (set in TEST_PROVIDER in .env).
-// Fields for other providers are ignored.
+// When ui-config.json exists its workstreams take precedence; otherwise the
+// env-var fallback below is used.
 
-export const WORKSTREAMS = [
+export const WORKSTREAMS = uiConfig?.workstreams?.length ? uiConfig.workstreams : [
   {
     name: 'PDM',
     // ADO
@@ -128,83 +135,81 @@ export const WORKSTREAMS = [
 // groupByFields: ['severity', 'priority']
 //   Automatically produces d[key+'BySeverity'], d[key+'ByPriority'], etc.
 //   Each groupBy result: { total: N, 'value1': count, 'value2': count, ... }
-//   Works for any field on any query — severity, priority, assignee, state, etc.
 //
-// Provider sections:
-//   ado  — structured config OR { wiql: string } for raw WIQL
-//   jira — function(ws) returning a JQL string
+// When ui-config.json exists its queries take precedence via buildQueriesFromConfig.
 
-export const QUERIES = [
-  {
-    key:           'bugs',
-    label:         'Open bugs',
-    fallback:      [],
-    scope:         'workstream',
-    groupByFields: ['severity', 'priority'],
+function buildQueriesFromConfig(queryConfigs) {
+  return queryConfigs
+    .filter(q => q.enabled !== false)
+    .map(q => {
+      const groupByFields = Array.isArray(q.groupByFields)
+        ? q.groupByFields
+        : (q.groupByFields ? String(q.groupByFields).split(',').map(s => s.trim()).filter(Boolean) : []);
 
-    ado: {
-      workItemType:  'Bug',
-      excludeStates: ['Closed', 'Resolved'],
-      orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
-      fields:        ADO_FIELDS,
-      fieldMap:      ADO_FIELD_MAP,
+      return {
+        key:           q.key,
+        label:         q.label,
+        fallback:      [],
+        scope:         q.scope || 'workstream',
+        groupByFields,
+        ...(q.wiqlTemplate ? {
+          ado: ws => ({
+            wiql: q.wiqlTemplate.replace(/\{\{(\w+)\}\}/g, (_, k) => (ws && ws[k]) || process.env[k] || ''),
+            fieldMap: ADO_FIELD_MAP,
+          }),
+        } : q.ado ? {
+          ado: {
+            workItemType:  q.ado.workItemType,
+            excludeStates: q.ado.excludeStates || [],
+            includeStates: q.ado.includeStates || [],
+            orderBy:       q.ado.orderBy || '[System.Id] ASC',
+            fields:        ADO_FIELDS,
+            fieldMap:      ADO_FIELD_MAP,
+          },
+        } : {}),
+        ...(q.jiraTemplate ? {
+          jira: ws => q.jiraTemplate.replace(/\{\{(\w+)\}\}/g, (_, k) => (ws && ws[k]) || process.env[k] || ''),
+        } : {}),
+      };
+    });
+}
+
+export const QUERIES = uiConfig?.queries?.length
+  ? buildQueriesFromConfig(uiConfig.queries)
+  : [
+    {
+      key:           'bugs',
+      label:         'Open bugs',
+      fallback:      [],
+      scope:         'workstream',
+      groupByFields: ['severity', 'priority'],
+
+      ado: {
+        workItemType:  'Bug',
+        excludeStates: ['Closed', 'Resolved'],
+        orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
+        fields:        ADO_FIELDS,
+        fieldMap:      ADO_FIELD_MAP,
+      },
+
+      jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND status != Resolved and status != Closed`,
     },
 
-    jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND status != Resolved and status != Closed`,
-  },
+    {
+      key:           'closedBugs',
+      label:         'Closed bugs',
+      fallback:      [],
+      scope:         'workstream',
+      groupByFields: [],
 
-  {
-    key:           'closedBugs',
-    label:         'Closed bugs',
-    fallback:      [],
-    scope:         'workstream',
-    groupByFields: [],
+      ado: {
+        workItemType:  'Bug',
+        excludeStates: ['Active', 'Resolved', 'New', 'Blocked'],
+        orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
+        fields:        ADO_FIELDS,
+        fieldMap:      ADO_FIELD_MAP,
+      },
 
-    ado: {
-      workItemType:  'Bug',
-      excludeStates: ['Active', 'Resolved', 'New', 'Blocked'],
-      orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
-      fields:        ADO_FIELDS,
-      fieldMap:      ADO_FIELD_MAP,
+      jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory = Done ORDER BY priority ASC`,
     },
-
-    jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory = Done ORDER BY priority ASC`,
-  },
-
-  // ── Example: project-wide query (scope: 'global') ──────────────────────────
-  // Runs once, no area-path filter, returns all items across the entire project.
-  // Useful when you want a single de-duplicated list rather than per-workstream counts.
-  //
-  // {
-  //   key:           'allBugs',
-  //   label:         'All open bugs (project-wide)',
-  //   fallback:      [],
-  //   scope:         'global',
-  //   groupByFields: ['severity', 'owner'],
-  //   ado: {
-  //     workItemType:  'Bug',
-  //     excludeStates: ['Closed', 'Resolved'],
-  //     orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
-  //     fields:        ADO_FIELDS,
-  //     fieldMap:      ADO_FIELD_MAP,
-  //   },
-  //   jira: () => `issuetype = Bug AND status != Resolved AND status != Closed`,
-  // },
-
-  // ── Example: group by assignee ────────────────────────────────────────────
-  // {
-  //   key:           'userStories',
-  //   label:         'Open user stories',
-  //   fallback:      [],
-  //   scope:         'workstream',
-  //   groupByFields: ['owner', 'state'],
-  //   ado: {
-  //     workItemType:  'User Story',
-  //     excludeStates: ['Closed', 'Resolved'],
-  //     orderBy:       '[System.CreatedDate] ASC',
-  //     fields:        ADO_FIELDS,
-  //     fieldMap:      ADO_FIELD_MAP,
-  //   },
-  //   jira: ws => `project = "${ws.projectKey}" AND issuetype = Story AND statusCategory != Done`,
-  // },
-];
+  ];

@@ -11,9 +11,14 @@
 // the same generate(data) export, and set OUTPUT_FORMAT=excel in your .env.
 
 import fs     from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import path   from 'path';
 import PizZip from 'pizzip';
+import { fileURLToPath } from 'url';
 import { VARIABLE_MAP } from '../variables.js';
+
+const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
+const UI_CONFIG_PATH = path.join(__dirname2, '..', 'ui-config.json');
 
 const args      = process.argv.slice(2);
 const getArg    = flag => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
@@ -44,8 +49,22 @@ export async function generate(data) {
 
   const zip = new PizZip(fs.readFileSync(TEMPLATE, 'binary'));
 
+  // Use UI-configured mappings if present, otherwise fall back to variables.js VARIABLE_MAP
+  let effectiveMap = VARIABLE_MAP;
+
+  if (existsSync(UI_CONFIG_PATH)) {
+    const uiConfig = JSON.parse(readFileSync(UI_CONFIG_PATH, 'utf8'));
+    const uiMappings = uiConfig.variableMappings || [];
+    if (uiMappings.length > 0) {
+      effectiveMap = {};
+      for (const { token, path: expr } of uiMappings) {
+        effectiveMap[token] = new Function('d', `try { return ${expr}; } catch { return ''; }`);
+      }
+    }
+  }
+
   const replacements = {};
-  for (const [key, getter] of Object.entries(VARIABLE_MAP)) {
+  for (const [key, getter] of Object.entries(effectiveMap)) {
     try {
       replacements[`{{${key}}}`] = String(getter(data) ?? '');
     } catch {
