@@ -1,0 +1,216 @@
+,,SIT Timeline,,,,,E2E Timeline (for ALL WS),,,,Parallel Timeline,,,,UAT Timeline,
+Test Data ,,Workstream,Duration,Proposed Dependencies,Notes,,Cycle ,Duration,Proposed Dependencies,,Cycle ,Duration,Proposed Dependencies,,Duration,Proposed Dependencies
+NA,,Ready to Sell (Benefits),"6/22/2026 to 10/15/2026
+
+(True Start Date - 6/30)","- Benefits Configured in (TEST and CONFIG)  Environment (CY 2026 & 2027)
+- CMS Plan Benefit Package (PBP) / bid data loaded for CY 2026 & 2027
+- Product & Plan setup (Contract / PBP / Plan IDs) configured in HRP
+- Cost-share configuration (copays, coinsurance, deductibles, MOOP / accumulators)
+- Service Area / county-zip & geography reference data loaded
+- Formulary / Rx benefit linkage configured (where applicable)
+- Benefit configuration promoted / migrated to SIT environment
+- SIT environment (CONFIG env.) provisioned and stable
+- EDIFECS integration for 834 ingestion
+- CTR (Claims Test Runner) Readiness (add member on the fly) --> NOT recomended for SIT
+- Provider data
+- Test management / defect tool (ADO) ready
+- SIT Test Cases and expected results are ready and loaded in ADO
+- Sample Membership & Providers & Contracts are loaded
+- Sample Claims
+- Supplier with 100% BILLED Amount
+- Authorization to ensure that Authorization requirement in Benefits is tested throughly",,,Cycle 1,11/16/2026 to 12/18/2026,"- SIT substantially complete for in-scope workstreams
+- Ready to Sell
+- Ready to Enroll
+- Ready to Service Providers
+- Integration with Zelis
+- Enterprise Service API
+- 837, 277CA, 835
+- Correspondence
+- OnBase
+- EDI 270/271 eligibility
+- EDA / Reports
+- End-to-end cross-workstream scenarios & test data mapped
+Test data / claims are available for E2E test
+- Integrated / converted test data available
+- All environments integrated and stable
+- SIT defects triaged with no open blockers",,Cycle 1 - Cycle 6,12/1/26 through 5/26/27,"- SIT substantially complete across all workstreams
+- E2E Cycle 1 & Cycle 2 complete
+- Production-like / converted data loaded
+- All integrations live in parallel environment (EDIFECS, Zelis, PBM, Enterprise Services)
+- Legacy system output available for comparison / reconciliation
+- Parallel test scripts & reconciliation criteria approved
+- No critical / blocking defects from SIT & E2E
+- Parallel environment provisioned and stable
+- claims identified and shared with Deloitte to perform the parallel cycles / runs/drops",,10/15/2026 - 10/31/2026 (PDM - UAT),
+Production ,,Ready to Enroll (Enrollment),7/15/2026 to 10/15/2026,"- Ready to Sell (Benefits) complete
+-LEP/LIS data delivered from Wipro and loaded
+-Member IDs delivered from Wipro and loaded
+-Validate IT-side PCP load accuracy
+-COB / other-coverage setup by Steff
+Worker's Comp / other-coverage setup 
+Validate effective-date load accuracy in HRP
+Validate disenrollment load accuracy in HRP
+Validate retro enrollment/correction load accuracy in HRP
+Demographic data loaded & updatable in HRP
+- SIT Test Cases are ready
+<good here>",,,Cycle 2,"1/4/2027 to 2/12/2027
+
+2/15/27 - 2/26/27(two additional weeks of E2E for RX+EDI+Catch All E2E)","- Cycle 1 complete with defects resolved & retested
+- SIT substantially complete for in-scope workstreams
+- Ready to Sell
+- Ready to Enroll
+- Ready to Service Providers
+- Integration with Zelis
+- Enterprise Service API
+- 837, 277CA, 835
+- Correspondence
+- OnBase
+- Med Management (278) / prior authorization
+- EDI 270/271 eligibility
+- EDA / Reports
+- RX Claims (if in scope)
+- End-to-end cross-workstream scenarios & test data mapped
+Test data / claims are available for E2E  test
+- All environments integrated and stable
+- No open critical / blocking defects",,,,,,3/1/2027 to 5/1/2027,"SIT is complete
+E2E is complete
+3 Parallel cycles are complete
+Functionality is stable and no critical defects outstanding
+Business / end-user UAT scripts approved
+UAT environment provisioned with production-like (converted) data
+User access & security roles provisioned
+Training materials / job aids available
+Data conversion validated
+Regulatory / CMS scenarios validated
+Go / No-Go criteria & defect thresholds defined"
+Production ,,Ready to Service Providers  (Provider - PDM),"8/15/2026 SIT (9/7/2026) to 10/15/2026 
+Reason to push: Iteration 2 took a lot longer to wrap: HE is working on the defect
+Iteration 3 Start date - 7/31/2026
+No Iteration 4 - RAID Decision to be added.
+
+Need dedicated testers (Business & IT)
+","- Provider Data (HRP, CPIMS, Ancillary) Converted to PDM
+<NO Dependency on SOURCE integration for PDM go Live>
+ - PDM Training
+- PDM Integration with HRP and downstream
+- Credentialing data loaded (partial data is OK to kickstart SIT)
+- Provider roster feed validated
+- PDM environment provisioned
+- SIT Test Cases are ready (7/31)
+
+
+",,,"HRP provider taxonomy/specialty code tables loaded High
+HRP network/contract configuration aligned with PDM setup
+NPI validation rules configured in HRP
+Provider effective date and termination logic validated in HRP
+<<NEED to discuss PDM to HRP integrations and data loads>>
+Need to have CERTIFY INTEGRTION data before GO LIVE - SIT, can start ",,,,,,,,,
+,,Ready to Service Providers  (Provider - Source),9/15/2026 to 11/15/2026,"- Provider Data (HRP, CPIMS, Cactus, Ancillary, Dental) Converted to PDM plus any new providers
+- Need Benefit Network on the locations 
+- Need NEW Location...
+- Source Training 
+- Source application configured, configuration build (edits & message codes) published & access provisioned
+- Provider onboarding / data-entry workflows ready
+- Integration: Source to HRP
+- Source environment provisioned (NON-PROD)
+- Provider Contracts in HRP
+- GPP configured in HRP 
+- SIT Test Cases are ready",do not need NEW providers to kick start the test….,,,,,,,,,,,
+(Open Item),,"Ready to Administer Claims (Claims )
+Ready to Finance ",10/1/2026 to 11/30/2026,"- Ready to Sell
+- Ready to Enroll
+- Ready to Service Providers
+- Integration with Zelis
+- Enterprise Service API
+- 837, 277CA, 835
+- Provider fee schedules & contracts loaded (pricing)
+- Benefit / accumulator configuration for cost-share adjudication
+- Clearinghouse / EDI gateway connectivity
+- Med Management (278) for prior-auth-dependent claims
+- Finance: GL / payment cycle / 835 remittance setup
+- SIT Test Cases are ready
+Payment Cycles configured
+Pricing - building the contract in Source - claims round trip to Source from HRP - need to have contract in HRP which tells which Contract ID in Source to check - and in Source the same contract will have all the pricing details.
+Ensure Payment Cycles are configured - PROMPT Pay - intrest and penalties - configuration
+Testing - Auto Offset - on/off
+COB - claims processing - workers comp - hospice
+Medicaid reclamation
+Dupe logic / Matching Logic / Claims to member / Supplier to Claim / Claims Review (Providers put on review due to potential Fraud /  Members on review due to transpant - custom validation policies / Compliance Program configured (Diabeties , Travel Benefits, State of Emmergency)
+Accumulator Adjustments (Rx , Lifetime Max etc.)",Source Training completed per Amanda …,,,,,,,,,,,
+,,"Ready to Administer Claims (RX Claims, 276/277)
+Ready to Finance ",2/1/2027 to 2/26/2027,"- Ready to Sell
+- Ready to Enroll
+- Ready to Service Providers
+- Integration with Zelis
+- Enterprise Service API
+- RX Claims build
+- PBM integration / connectivity
+- Formulary & Rx benefit configuration
+- Pharmacy network & pricing loaded
+- NCPDP transaction processing configured
+- Accumulator (TrOOP) integration
+- 276/277
+- SIT Test Cases are ready
+PRIME is configured in PROD so ensure it is configured to be tested as a secondary editor.. (This will take care of Auth)
+",Jennifer's team will be going through (WATCH) the recordings to understanding Source…,,,,,,,,,,,
+Production,,Med Managament (278),"12/1/2026 to 1/15/2027 
+(based on 7/1 conversation): SIT can potentially start sooner (New possible date - In discussion)
+","- Ready to Sell
+- Ready to Enroll
+- Ready to Service Providers
+- Integration with Zelis
+- Med Compass Readiness
+- Enterprise Service API (member look-up & provider crosswalk services from ES)
+- Authorization / UM rules configured
+- 278 request/response transaction processing
+- Integration: HRP to MedCompass
+- SIT Test Cases are ready
+(dates might shift left depending on when ES will deliver member look up & provider crosswalk services to MM team)
+Referral categories are configured in HRP - need to match with Medcompass",,,,,,,,,,,,
+,,Correspondence,10/15/2026 to 11/30/2026,"- Ready to Sell & Ready to Enroll (member & benefit data)
+- Correspondence templates & letters configured (ANOC/EOC, denial/approval, ID cards)
+- CMS-required notices / model documents loaded
+- Integration: HRP to DBX to  Correspondence engine
+- Print / fulfillment vendor integration
+- OnBase integration for document storage
+- Correspondence environment provisioned
+- SIT Test Cases are ready",,,,,,,,,,,,
+Production,,OnBase,11/1/2026 to 11/30/2026 (with 12/1/26 to 12/15/26) added as 3rd buffer cycle. --> as discussed on 6/18  ,"- Document types & workflows configured
+- Integration: HRP / Correspondence / Claims to OnBase
+- Inbound document capture & indexing setup
+- Retention & security rules configured
+- OnBase environment provisioned
+- SIT Test Cases are ready","Finalized on 6/18 W/ Onbase team
+
+NO configuration in HRP ",,,,,,,,,,,
+Synthetic,,EDI (270/271,"2/1/2027 TO 2/15/2027
+(The rest of the transaction will be tested with other WS as follows:
+834 - Enrollment
+835/837 - Claims)
+","- Enterprise Service API / eligibility service available
+- Member & benefit / eligibility data loaded
+- EDIFECS / clearinghouse connectivity for 270/271
+- Real-time eligibility response mapping configured
+- Trading partner setup
+- EDI environment provisioned
+- SIT Test Cases are ready",,,,,,,,,,,,
+Production,,Enterprise Services,9/7/2026 - 12/15/2026,"API gateway / integration platform provisioned
+Member look-up, provider crosswalk & eligibility services deployed
+Source data (HRP, PDM, Enrollment) available
+Service contracts / specs finalized
+Security / authentication (OAuth / tokens) configured
+Enterprise Services environment provisioned
+Claims provisioned to valdiate/test the services
+SIT Test Cases are ready",Follow up on API timelines,,,,,,,,,,,
+Production / Synthetically Generated,,EDA (Reports),9/7/2026 to 10/15/2026 ,"Source data from HRP, PDM, Enrollment, Claims available in data warehouse / EDA
+ETL / data pipelines configured
+List of all the critical fields to be mapped
+Report Name specifications & layouts approved
+- CMS / regulatory reporting requirements mapped
+- BI / reporting environment provisioned
+- SIT Test Cases are ready",,,,,,,,,,,,
+,,ASO,9/21/2026 - 02/12/2027,,,,,,,,,,,,,
+Production,,,,,,,,,,,,,,,,
+N/A ( No Data Needed),,Customer Service is not considered as it NOT in the integrated plan,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
+,,,,,,,,,,,,,,,,
