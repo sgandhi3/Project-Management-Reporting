@@ -1,8 +1,13 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
-import { WORKSTREAMS, QUERIES } from './config.js';
+import { WORKSTREAMS, QUERIES, SETTINGS } from './config.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
-const OUTPUTS  = (process.env.OUTPUT_FORMAT || 'ppt').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+
+// ui-config.json outputFormats (set by the UI checkboxes) takes precedence over OUTPUT_FORMAT in .env
+// so that unchecking a format in the UI immediately takes effect without editing .env manually
+const OUTPUTS = SETTINGS.outputFormats?.length
+  ? SETTINGS.outputFormats
+  : (process.env.OUTPUT_FORMAT || 'ppt').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 

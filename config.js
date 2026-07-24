@@ -174,6 +174,8 @@ function buildQueriesFromConfig(queryConfigs) {
     });
 }
 
+export const SETTINGS = uiConfig?.settings || {};
+
 export const QUERIES = uiConfig?.queries?.length
   ? buildQueriesFromConfig(uiConfig.queries)
   : [
