@@ -1,0 +1,1424 @@
+<title>MMO Report Generator</title>
+<style>
+  /* ── Reset & base ───────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Design tokens ──────────────────────────────────────────────────────── */
+  :root {
+    --sidebar-bg:       #1a2035;
+    --sidebar-border:   rgba(255,255,255,0.07);
+    --sidebar-text:     #8b96b0;
+    --sidebar-hover:    rgba(255,255,255,0.05);
+    --sidebar-active:   rgba(255,255,255,0.10);
+    --sidebar-accent:   #4f7ef8;
+    --nav-text-active:  #ffffff;
+    --sidebar-width:    220px;
+
+    --bg:               #f0f2f7;
+    --surface:          #ffffff;
+    --surface-2:        #f7f8fb;
+    --border:           #e3e7ef;
+    --text:             #1c2033;
+    --text-muted:       #6b7490;
+    --accent:           #4f7ef8;
+    --accent-hover:     #3563e9;
+    --danger:           #e03d3d;
+    --danger-bg:        rgba(224,61,61,0.08);
+    --success:          #27a85c;
+    --warn:             #d97706;
+
+    --input-bg:         #ffffff;
+    --input-border:     #d0d5e0;
+    --input-focus:      #4f7ef8;
+
+    --term-bg:          #0d1117;
+    --term-text:        #c9d1d9;
+    --term-success:     #3fb950;
+    --term-error:       #f85149;
+
+    --radius:           8px;
+    --shadow:           0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:         #0d1117;
+      --surface:    #161b22;
+      --surface-2:  #1c2333;
+      --border:     #30363d;
+      --text:       #e6edf3;
+      --text-muted: #8b949e;
+      --input-bg:   #21262d;
+      --input-border:#30363d;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:         #0d1117;
+    --surface:    #161b22;
+    --surface-2:  #1c2333;
+    --border:     #30363d;
+    --text:       #e6edf3;
+    --text-muted: #8b949e;
+    --input-bg:   #21262d;
+    --input-border:#30363d;
+  }
+  :root[data-theme="light"] {
+    --bg:         #f0f2f7;
+    --surface:    #ffffff;
+    --surface-2:  #f7f8fb;
+    --border:     #e3e7ef;
+    --text:       #1c2033;
+    --text-muted: #6b7490;
+    --input-bg:   #ffffff;
+    --input-border:#d0d5e0;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────────────────── */
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+    background: var(--bg);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Sidebar ─────────────────────────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-width);
+    background: var(--sidebar-bg);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .sidebar-header {
+    padding: 24px 18px 16px;
+    border-bottom: 1px solid var(--sidebar-border);
+  }
+  .sidebar-header h1 {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--nav-text-active);
+  }
+  .sidebar-header p {
+    font-size: 11px;
+    color: var(--sidebar-text);
+    margin-top: 3px;
+  }
+  .sidebar-section {
+    padding: 14px 0 4px;
+  }
+  .sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--sidebar-text);
+    padding: 0 18px 6px;
+    opacity: 0.7;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 18px;
+    cursor: pointer;
+    color: var(--sidebar-text);
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.12s, color 0.12s;
+    border-left: 3px solid transparent;
+    user-select: none;
+  }
+  .nav-item:hover { background: var(--sidebar-hover); color: var(--nav-text-active); }
+  .nav-item.active {
+    background: var(--sidebar-active);
+    color: var(--nav-text-active);
+    border-left-color: var(--sidebar-accent);
+  }
+  .nav-icon {
+    width: 16px;
+    height: 16px;
+    opacity: 0.75;
+    flex-shrink: 0;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.75;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 16px 18px;
+    border-top: 1px solid var(--sidebar-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .sidebar-footer span {
+    font-size: 11px;
+    color: var(--sidebar-text);
+  }
+
+  /* ── Main content ─────────────────────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 12px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow);
+  }
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .topbar-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px;
+    display: none;
+  }
+  .tab-content.active { display: block; }
+
+  /* ── Cards ───────────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+  }
+  .card-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+  .section-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .section-heading {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* ── Form elements ───────────────────────────────────────────────────────── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px 20px;
+  }
+  .form-grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px 20px;
+  }
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .form-group.full { grid-column: 1 / -1; }
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  input[type="text"],
+  input[type="password"],
+  select,
+  textarea {
+    padding: 8px 11px;
+    border: 1px solid var(--input-border);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text);
+    font-size: 13px;
+    font-family: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--input-focus);
+    box-shadow: 0 0 0 3px rgba(79,126,248,0.12);
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  .hint { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* ── Buttons ─────────────────────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: inherit;
+    cursor: pointer;
+    border: none;
+    transition: background 0.15s, opacity 0.15s;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary  { background: var(--accent); color: #fff; }
+  .btn-primary:hover:not(:disabled)  { background: var(--accent-hover); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover:not(:disabled) { background: var(--surface-2); }
+  .btn-danger {
+    background: var(--danger-bg);
+    color: var(--danger);
+    border: 1px solid rgba(224,61,61,0.25);
+  }
+  .btn-danger:hover:not(:disabled) { background: rgba(224,61,61,0.15); }
+  .btn-run {
+    width: 100%;
+    justify-content: center;
+    padding: 13px;
+    font-size: 15px;
+    font-weight: 600;
+    background: var(--accent);
+    color: #fff;
+    border-radius: var(--radius);
+  }
+  .btn-run.running { background: var(--danger); }
+  .btn-run:hover:not(:disabled) { filter: brightness(1.08); }
+  .btn-sm { padding: 5px 11px; font-size: 12px; }
+
+  /* ── Tables ──────────────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    text-align: left;
+    padding: 9px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--border);
+    white-space: nowrap;
+  }
+  tbody tr { transition: background 0.1s; }
+  tbody tr:hover { background: var(--surface-2); }
+  tbody tr.expanded { background: var(--surface-2); }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  td input[type="text"] {
+    padding: 5px 8px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 13px;
+  }
+  td input[type="text"]:focus {
+    border-color: var(--input-focus);
+    background: var(--input-bg);
+    box-shadow: 0 0 0 2px rgba(79,126,248,0.10);
+  }
+  .td-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+  /* ── Toggle switch ───────────────────────────────────────────────────────── */
+  .toggle { position: relative; display: inline-block; width: 38px; height: 21px; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle-slider {
+    position: absolute; cursor: pointer; inset: 0;
+    background: var(--input-border); border-radius: 21px; transition: 0.18s;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute;
+    width: 15px; height: 15px; left: 3px; bottom: 3px;
+    background: #fff; border-radius: 50%; transition: 0.18s;
+  }
+  .toggle input:checked + .toggle-slider { background: var(--accent); }
+  .toggle input:checked + .toggle-slider::before { transform: translateX(17px); }
+
+  /* ── Setting rows ────────────────────────────────────────────────────────── */
+  .setting-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .setting-row:last-child { border-bottom: none; }
+  .setting-info {}
+  .setting-label { font-size: 14px; font-weight: 500; color: var(--text); }
+  .setting-desc  { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* ── Checkbox group ──────────────────────────────────────────────────────── */
+  .checkbox-group { display: flex; flex-direction: column; gap: 10px; }
+  .checkbox-item  { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+  .checkbox-item input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent); }
+  .checkbox-item span { font-size: 13px; color: var(--text); }
+
+  /* ── Terminal ────────────────────────────────────────────────────────────── */
+  .terminal {
+    background: var(--term-bg); color: var(--term-text);
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px; line-height: 1.65;
+    min-height: 360px; max-height: 500px;
+    overflow-y: auto;
+    white-space: pre-wrap; word-break: break-all;
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .terminal .line-ts {
+    color: #484f58;
+    user-select: none;
+    margin-right: 6px;
+  }
+  .terminal-placeholder { color: #484f58; font-style: italic; }
+  .term-exit-ok  { color: var(--term-success); font-weight: 600; }
+  .term-exit-err { color: var(--term-error); font-weight: 600; }
+
+  /* ── Badge / tag ─────────────────────────────────────────────────────────── */
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.03em;
+  }
+  .badge-blue   { background: rgba(79,126,248,0.12); color: #4f7ef8; }
+  .badge-green  { background: rgba(39,168,92,0.12);  color: #27a85c; }
+  .badge-gray   { background: rgba(107,116,144,0.12); color: var(--text-muted); }
+
+  /* ── Toast ───────────────────────────────────────────────────────────────── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    padding: 11px 18px; border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    z-index: 9999; max-width: 320px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+    animation: toastIn 0.2s ease;
+  }
+  .toast-success { background: var(--success); color: #fff; }
+  .toast-error   { background: var(--danger);  color: #fff; }
+  @keyframes toastIn {
+    from { transform: translateY(12px); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  /* ── Loading state ───────────────────────────────────────────────────────── */
+  .loading { color: var(--text-muted); font-style: italic; padding: 20px 0; text-align: center; }
+
+  /* ── Expand row detail ───────────────────────────────────────────────────── */
+  .detail-row td { background: var(--surface-2); padding: 16px 18px; }
+  .detail-grid {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px 20px;
+  }
+  .clickable-row { cursor: pointer; }
+  .expand-arrow {
+    display: inline-block; transition: transform 0.15s;
+    font-size: 10px; margin-right: 4px; color: var(--text-muted);
+  }
+  .expand-arrow.open { transform: rotate(90deg); }
+
+  /* ── Variables tab ──────────────────────────────────────────────────────── */
+  .var-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 18px;
+    align-items: start;
+  }
+  @media (max-width: 900px) { .var-layout { grid-template-columns: 1fr; } }
+  .var-paths-panel { max-height: 580px; overflow-y: auto; }
+  .var-group-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--text-muted); padding: 12px 0 6px;
+  }
+  .var-group-label:first-child { padding-top: 0; }
+  .var-path-item {
+    font-family: 'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;
+    font-size: 11px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-2);
+    margin-bottom: 4px;
+    cursor: pointer;
+    word-break: break-all;
+    position: relative;
+    transition: background 0.12s, border-color 0.12s, color 0.12s;
+    line-height: 1.5;
+  }
+  .var-path-item:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .copied-badge {
+    position: absolute; top: 4px; right: 7px;
+    font-size: 10px; font-weight: 700;
+    color: var(--success); font-family: inherit; pointer-events: none;
+  }
+  .var-path-item:hover .copied-badge { color: #fff; }
+
+  /* ── Run status indicator ────────────────────────────────────────────────── */
+  .run-status {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--text-muted);
+    margin-bottom: 14px; min-height: 26px;
+  }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); flex-shrink: 0;
+    animation: pulse 1.2s infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+  }
+</style>
+
+<div class="sidebar">
+  <div class="sidebar-header">
+    <h1>MMO Report</h1>
+    <p>Configuration &amp; Run</p>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Configuration</div>
+    <div class="nav-item active" data-tab="credentials" onclick="activateTab('credentials')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      Provider &amp; Credentials
+    </div>
+    <div class="nav-item" data-tab="workstreams" onclick="activateTab('workstreams')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Workstreams
+    </div>
+    <div class="nav-item" data-tab="queries" onclick="activateTab('queries')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Queries
+    </div>
+    <div class="nav-item" data-tab="variables" onclick="activateTab('variables')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h10M4 17h7"/></svg>
+      Variables
+    </div>
+    <div class="nav-item" data-tab="settings" onclick="activateTab('settings')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">Actions</div>
+    <div class="nav-item" data-tab="run" onclick="activateTab('run')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Run Report
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <span id="server-port">Port 3001</span>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="topbar-title">Provider &amp; Credentials</span>
+    <span class="topbar-subtitle" id="topbar-sub">Configure your environment variables</span>
+  </div>
+
+  <!-- ── Tab: Credentials ───────────────────────────────────────────────────── -->
+  <div id="tab-credentials" class="tab-content active">
+    <div class="card">
+      <div class="card-title">General</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="env-TEST_PROVIDER">Test Provider</label>
+          <select id="env-TEST_PROVIDER">
+            <option value="ado">ado — Azure DevOps</option>
+            <option value="jira">jira — Jira + Zephyr Scale</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="env-PPTX_TEMPLATE">PPTX Template Path</label>
+          <input type="text" id="env-PPTX_TEMPLATE" placeholder="./temp.pptx">
+        </div>
+        <div class="form-group">
+          <label for="env-SUMMARY_NOTES_FILE">Summary Notes File</label>
+          <input type="text" id="env-SUMMARY_NOTES_FILE" placeholder="./notes.csv">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Azure DevOps (ADO)</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="env-ADO_ORG">ADO Organization</label>
+          <input type="text" id="env-ADO_ORG" placeholder="your-org">
+          <span class="hint">Part after dev.azure.com/ in the URL</span>
+        </div>
+        <div class="form-group">
+          <label for="env-ADO_PROJECT">ADO Project</label>
+          <input type="text" id="env-ADO_PROJECT" placeholder="your-project">
+        </div>
+        <div class="form-group">
+          <label for="env-ADO_PAT">Personal Access Token</label>
+          <input type="password" id="env-ADO_PAT" placeholder="Leave blank to keep current value" autocomplete="new-password">
+          <span class="hint">Needs Read access for Work Items and Test Management</span>
+        </div>
+        <div class="form-group">
+          <label for="env-PLAN_ID">Test Plan ID</label>
+          <input type="text" id="env-PLAN_ID" placeholder="12345">
+          <span class="hint">From the plan URL in ADO</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Jira + Zephyr Scale</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="env-JIRA_DOMAIN">Jira Domain</label>
+          <input type="text" id="env-JIRA_DOMAIN" placeholder="your-org">
+          <span class="hint">Part before .atlassian.net</span>
+        </div>
+        <div class="form-group">
+          <label for="env-JIRA_EMAIL">Jira Email</label>
+          <input type="text" id="env-JIRA_EMAIL" placeholder="you@company.com">
+        </div>
+        <div class="form-group">
+          <label for="env-JIRA_API_TOKEN">Jira API Token</label>
+          <input type="password" id="env-JIRA_API_TOKEN" placeholder="Leave blank to keep current value" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="env-ZEPHYR_TOKEN">Zephyr Scale Token</label>
+          <input type="password" id="env-ZEPHYR_TOKEN" placeholder="Leave blank to keep current value" autocomplete="new-password">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">AI Summary</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="env-ANTHROPIC_API_KEY">Anthropic API Key</label>
+          <input type="password" id="env-ANTHROPIC_API_KEY" placeholder="Leave blank to keep current value" autocomplete="new-password">
+          <span class="hint">Required for the ai-summary extension</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
+      <button class="btn btn-primary" onclick="saveCredentials()">Save credentials</button>
+    </div>
+  </div>
+
+  <!-- ── Tab: Workstreams ──────────────────────────────────────────────────── -->
+  <div id="tab-workstreams" class="tab-content">
+    <div class="section-row">
+      <span class="section-heading">Workstreams</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="addWorkstream()">Add workstream</button>
+        <button class="btn btn-primary"   onclick="saveWorkstreams()">Save</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="table-wrap">
+        <table id="ws-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Plan ID</th>
+              <th>SIT Suite ID</th>
+              <th>Area Path</th>
+              <th>Project Key</th>
+              <th>Test Cycle Key</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="ws-tbody">
+            <tr><td colspan="7" class="loading">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:-8px;">
+      Plan ID, SIT Suite ID and Area Path are used by the ADO provider.
+      Project Key and Test Cycle Key are used by the Jira / Zephyr provider.
+    </p>
+  </div>
+
+  <!-- ── Tab: Queries ──────────────────────────────────────────────────────── -->
+  <div id="tab-queries" class="tab-content">
+    <div class="section-row">
+      <span class="section-heading">Queries</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="addQuery()">Add query</button>
+        <button class="btn btn-primary"   onclick="saveQueries()">Save</button>
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div class="table-wrap">
+        <table id="q-table">
+          <thead>
+            <tr>
+              <th style="width:28px;"></th>
+              <th>Label</th>
+              <th>Key</th>
+              <th>Enabled</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="q-tbody">
+            <tr><td colspan="6" class="loading">Loading...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <p class="hint" style="margin-top:-8px;">
+      Click a row to expand and edit WIQL/JQL settings. Changes are saved when you click Save.
+    </p>
+  </div>
+
+  <!-- ── Tab: Settings ─────────────────────────────────────────────────────── -->
+  <div id="tab-settings" class="tab-content">
+    <div class="section-row">
+      <span class="section-heading">Settings</span>
+      <button class="btn btn-primary" onclick="saveSettings()">Save settings</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Report Behavior</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Fetch test stats</div>
+          <div class="setting-desc">Query test execution counts (planned / executed / passed / failed) per workstream</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="sett-fetchTestStats">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Output Formats</div>
+      <div class="setting-row" style="flex-direction:column;align-items:flex-start;gap:14px;">
+        <div class="setting-info">
+          <div class="setting-desc">Select which extensions to run after data is collected. Multiple formats can be active at once.</div>
+        </div>
+        <div class="checkbox-group">
+          <label class="checkbox-item">
+            <input type="checkbox" id="fmt-ppt" value="ppt">
+            <span><strong>ppt</strong> — PowerPoint report (requires a PPTX template)</span>
+          </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="fmt-ai-summary" value="ai-summary">
+            <span><strong>ai-summary</strong> — AI-generated executive summary (requires ANTHROPIC_API_KEY)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Variables ───────────────────────────────────────────────────── -->
+  <div id="tab-variables" class="tab-content">
+    <div class="section-row">
+      <span class="section-heading">Variable Mappings</span>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-secondary" onclick="addVariable()">Add Variable</button>
+        <button class="btn btn-primary"   onclick="saveVariables()">Save Mappings</button>
+      </div>
+    </div>
+    <div class="var-layout">
+      <!-- Left: Token Mappings table -->
+      <div>
+        <div class="card" style="padding:0;overflow:hidden;">
+          <div class="table-wrap">
+            <table id="var-table">
+              <thead>
+                <tr>
+                  <th style="width:140px;">Token</th>
+                  <th>Data Path / Expression</th>
+                  <th style="width:72px;"></th>
+                </tr>
+              </thead>
+              <tbody id="var-tbody">
+                <tr><td colspan="3" class="loading">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="hint" style="margin-top:-8px;">
+          Token is what appears in your template as
+          <code style="font-family:monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px;border:1px solid var(--border);">{{TOKEN}}</code>.
+          The expression is evaluated with <code style="font-family:monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px;border:1px solid var(--border);">d</code> as the data object.
+          When any mappings are saved here they replace the static <code style="font-family:monospace;background:var(--surface-2);padding:1px 5px;border-radius:4px;border:1px solid var(--border);">variables.js</code> map.
+        </p>
+      </div>
+      <!-- Right: Available Data Paths -->
+      <div class="card">
+        <div class="card-title">Available Data Paths</div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">Click any path to copy it to clipboard</p>
+        <div class="var-paths-panel" id="var-paths-panel">
+          <div class="loading">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Run ───────────────────────────────────────────────────────────── -->
+  <div id="tab-run" class="tab-content">
+    <div class="section-row">
+      <span class="section-heading">Run Report</span>
+    </div>
+    <div class="card">
+      <div class="card-title">Launch</div>
+      <p style="color:var(--text-muted);font-size:13px;margin-bottom:18px;">
+        Runs <code style="font-family:monospace;background:var(--surface-2);padding:1px 6px;border-radius:4px;border:1px solid var(--border);">node gather-data.js</code> in the project root.
+        Make sure all credentials and workstreams are configured before running.
+      </p>
+      <button class="btn btn-run" id="run-btn" onclick="toggleRun()">Run Report</button>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;color:var(--text);">Output</span>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="run-status" id="run-status" style="margin-bottom:0;"></div>
+          <button class="btn btn-secondary btn-sm" onclick="clearTerminal()">Clear</button>
+        </div>
+      </div>
+      <div class="terminal" id="terminal">
+        <span class="terminal-placeholder">Output will appear here when the report runs...</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const tabLoaded   = {};
+let cachedConfig  = null;
+let cachedEnv     = null;
+let queriesData   = [];
+let sseSource     = null;
+let isRunning     = false;
+
+const TAB_TITLES = {
+  credentials: ['Provider & Credentials', 'Configure your environment variables'],
+  workstreams:  ['Workstreams',            'Manage data sources per team / stream'],
+  queries:      ['Queries',               'Define what data is fetched each run'],
+  variables:    ['Variables',             'Map PPT/Excel tokens to data paths'],
+  settings:     ['Settings',              'Output format and behavior options'],
+  run:          ['Run Report',            'Execute the report generator'],
+};
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function activateTab(tabId) {
+  document.querySelectorAll('.nav-item').forEach(el =>
+    el.classList.toggle('active', el.dataset.tab === tabId));
+  document.querySelectorAll('.tab-content').forEach(el =>
+    el.classList.toggle('active', el.id === `tab-${tabId}`));
+
+  const [title, sub] = TAB_TITLES[tabId] || [tabId, ''];
+  document.getElementById('topbar-title').textContent = title;
+  document.getElementById('topbar-sub').textContent   = sub;
+
+  if (!tabLoaded[tabId]) {
+    tabLoaded[tabId] = true;
+    loadTab(tabId);
+  }
+}
+
+async function loadTab(tabId) {
+  if (tabId === 'credentials') await loadCredentials();
+  if (tabId === 'workstreams') await loadWorkstreams();
+  if (tabId === 'queries')     await loadQueries();
+  if (tabId === 'variables')   await loadVariables();
+  if (tabId === 'settings')    await loadSettings();
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function api(method, url, body) {
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const msg = await res.text().catch(() => res.statusText);
+    throw new Error(`${res.status}: ${msg}`);
+  }
+  return res.json();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Credentials tab ───────────────────────────────────────────────────────────
+const SENSITIVE_FIELDS = ['ADO_PAT', 'JIRA_API_TOKEN', 'ZEPHYR_TOKEN', 'ANTHROPIC_API_KEY'];
+const PLAIN_FIELDS     = ['TEST_PROVIDER','ADO_ORG','ADO_PROJECT','JIRA_DOMAIN','JIRA_EMAIL',
+                          'PPTX_TEMPLATE','SUMMARY_NOTES_FILE','PLAN_ID'];
+
+async function loadCredentials() {
+  try {
+    cachedEnv = await api('GET', '/api/env');
+    for (const key of PLAIN_FIELDS) {
+      const el = document.getElementById(`env-${key}`);
+      if (!el) continue;
+      if (el.tagName === 'SELECT') {
+        el.value = (cachedEnv[key] || 'ado').toLowerCase();
+      } else {
+        el.value = cachedEnv[key] || '';
+      }
+    }
+    // Sensitive fields: leave empty (placeholder = 'Leave blank to keep current value')
+    // If the API returned *** it means the key exists but we don't show the value
+  } catch (e) {
+    toast('Failed to load credentials: ' + e.message, 'error');
+  }
+}
+
+async function saveCredentials() {
+  try {
+    const updates = {};
+    for (const key of PLAIN_FIELDS) {
+      const el = document.getElementById(`env-${key}`);
+      if (el) updates[key] = el.value.trim();
+    }
+    for (const key of SENSITIVE_FIELDS) {
+      const el = document.getElementById(`env-${key}`);
+      if (el && el.value.trim()) updates[key] = el.value.trim();
+    }
+    await api('PUT', '/api/env', { updates });
+    // Clear sensitive fields after save
+    for (const key of SENSITIVE_FIELDS) {
+      const el = document.getElementById(`env-${key}`);
+      if (el) el.value = '';
+    }
+    toast('Credentials saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ── Workstreams tab ───────────────────────────────────────────────────────────
+const WS_FIELDS = ['name','planId','sitSuiteId','areaPath','projectKey','testCycleKey'];
+
+async function loadWorkstreams() {
+  try {
+    cachedConfig = await api('GET', '/api/config');
+    renderWorkstreams(cachedConfig.workstreams || []);
+  } catch (e) {
+    toast('Failed to load workstreams: ' + e.message, 'error');
+  }
+}
+
+function renderWorkstreams(list) {
+  const tbody = document.getElementById('ws-tbody');
+  tbody.innerHTML = '';
+  list.forEach((ws, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = WS_FIELDS.map(f =>
+      `<td><input type="text" data-idx="${idx}" data-field="${f}" value="${esc(ws[f] || '')}" placeholder="${f}"></td>`
+    ).join('') + `<td class="td-actions"><button class="btn btn-danger btn-sm" onclick="deleteWorkstream(${idx})">Remove</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addWorkstream() {
+  if (!cachedConfig) return;
+  cachedConfig.workstreams = cachedConfig.workstreams || [];
+  cachedConfig.workstreams.push({ name:'', planId:'', sitSuiteId:'', areaPath:'', projectKey:'', testCycleKey:'' });
+  renderWorkstreams(cachedConfig.workstreams);
+}
+
+function deleteWorkstream(idx) {
+  if (!cachedConfig) return;
+  cachedConfig.workstreams.splice(idx, 1);
+  renderWorkstreams(cachedConfig.workstreams);
+}
+
+async function saveWorkstreams() {
+  try {
+    const rows  = document.querySelectorAll('#ws-tbody tr');
+    const workstreams = Array.from(rows).map(row => {
+      const ws = {};
+      WS_FIELDS.forEach(f => {
+        const inp = row.querySelector(`[data-field="${f}"]`);
+        ws[f] = inp ? inp.value.trim() : '';
+      });
+      return ws;
+    });
+    const config = cachedConfig || await api('GET', '/api/config');
+    config.workstreams = workstreams;
+    await api('PUT', '/api/config', config);
+    cachedConfig = config;
+    toast('Workstreams saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ── Queries tab ───────────────────────────────────────────────────────────────
+async function loadQueries() {
+  try {
+    cachedConfig = cachedConfig || await api('GET', '/api/config');
+    queriesData = (cachedConfig.queries || []).map(q => ({ ...q }));
+    renderQueries();
+  } catch (e) {
+    toast('Failed to load queries: ' + e.message, 'error');
+  }
+}
+
+function renderQueries() {
+  const tbody = document.getElementById('q-tbody');
+  tbody.innerHTML = '';
+  queriesData.forEach((q, idx) => {
+    const scope         = q.scope || 'workstream';
+    const groupByFields = Array.isArray(q.groupByFields)
+      ? q.groupByFields.join(', ')
+      : (q.groupByFields || '');
+
+    // Main row
+    const scopeBadge = scope === 'global'
+      ? `<span class="badge" style="background:var(--purple,#7c3aed);color:#fff;font-size:10px;margin-left:6px;">global</span>`
+      : '';
+    const tr = document.createElement('tr');
+    tr.className = 'clickable-row';
+    tr.id = `qrow-${idx}`;
+    tr.innerHTML = `
+      <td><span class="expand-arrow" id="qarrow-${idx}">&#9656;</span></td>
+      <td>${esc(q.label || '')}${scopeBadge}</td>
+      <td><span class="badge badge-blue">${esc(q.key || '')}</span></td>
+      <td>
+        <label class="toggle" onclick="event.stopPropagation()">
+          <input type="checkbox" id="q-enabled-${idx}" ${q.enabled !== false ? 'checked' : ''} onchange="queriesData[${idx}].enabled=this.checked">
+          <span class="toggle-slider"></span>
+        </label>
+      </td>
+      <td class="td-actions"><button class="btn btn-danger btn-sm" onclick="event.stopPropagation();deleteQuery(${idx})">Remove</button></td>`;
+    tr.onclick = () => toggleQueryDetail(idx);
+    tbody.appendChild(tr);
+
+    const wiqlPlaceholderWorkstream = [
+      "SELECT [System.Id], [System.Title], ...",
+      "FROM WorkItems",
+      "WHERE [System.WorkItemType] = 'Bug'",
+      "  AND [System.TeamProject] = '{{ADO_PROJECT}}'",
+      "  AND [System.AreaPath] UNDER '{{areaPath}}'",
+      "ORDER BY [System.Id] ASC",
+    ].join('\n');
+
+    const wiqlPlaceholderGlobal = [
+      "SELECT [System.Id], [System.Title], ...",
+      "FROM WorkItems",
+      "WHERE [System.WorkItemType] = 'Bug'",
+      "  AND [System.TeamProject] = '{{ADO_PROJECT}}'",
+      "  AND [System.State] <> 'Closed'",
+      "ORDER BY [System.Id] ASC",
+    ].join('\n');
+
+    const wiqlPlaceholder = scope === 'global' ? wiqlPlaceholderGlobal : wiqlPlaceholderWorkstream;
+    const wiqlHint = scope === 'global'
+      ? `Global query — runs once for the whole project. Use <code>{{ADO_PROJECT}}</code> as a placeholder. No area path filter.`
+      : `Per-workstream query — runs once per workstream. Use <code>{{areaPath}}</code> and <code>{{ADO_PROJECT}}</code> as placeholders.`;
+
+    const jqlHint = scope === 'global'
+      ? `Global JQL — runs once. No project filter needed unless you want to target a specific project.`
+      : `Per-workstream JQL — use <code>{{projectKey}}</code> for the workstream's Jira project.`;
+
+    const groupByHint = groupByFields
+      ? `Results available as: ${groupByFields.split(',').map(f => `<code>d.${q.key || 'query'}By${f.trim().charAt(0).toUpperCase()}${f.trim().slice(1)}</code>`).join(', ')}`
+      : `Leave empty if you don't need aggregated counts.`;
+
+    // Detail row (hidden initially)
+    const detail = document.createElement('tr');
+    detail.className = 'detail-row';
+    detail.id = `qdetail-${idx}`;
+    detail.style.display = 'none';
+    detail.innerHTML = `<td colspan="5">
+      <div class="detail-grid">
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" value="${esc(q.label||'')}" oninput="queriesData[${idx}].label=this.value;document.querySelector('#qrow-${idx} td:nth-child(2)').childNodes[0].textContent=this.value">
+        </div>
+        <div class="form-group">
+          <label>Key (unique ID)</label>
+          <input type="text" value="${esc(q.key||'')}" oninput="queriesData[${idx}].key=this.value;document.querySelector('#qrow-${idx} .badge').textContent=this.value">
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Scope</label>
+          <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;">
+            <label style="display:flex;align-items:center;gap:6px;padding:7px 16px;cursor:pointer;background:${scope==='workstream'?'var(--accent)':'transparent'};color:${scope==='workstream'?'#fff':'inherit'};transition:background .15s;">
+              <input type="radio" name="scope-${idx}" value="workstream" ${scope==='workstream'?'checked':''} onchange="queriesData[${idx}].scope='workstream';renderQueries()" style="display:none">
+              Per workstream
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;padding:7px 16px;cursor:pointer;border-left:1px solid var(--border);background:${scope==='global'?'var(--accent)':'transparent'};color:${scope==='global'?'#fff':'inherit'};transition:background .15s;">
+              <input type="radio" name="scope-${idx}" value="global" ${scope==='global'?'checked':''} onchange="queriesData[${idx}].scope='global';renderQueries()" style="display:none">
+              Global (whole project)
+            </label>
+          </div>
+          <span class="hint">${scope==='workstream'?'Runs once per workstream, filtered by each area path. Results: <code>d.'+esc(q.key||'key')+'.PDM</code>, <code>d.'+esc(q.key||'key')+'Total</code>':'Runs <strong>once</strong> for the whole project — no area path filter. Result: <code>d.'+esc(q.key||'key')+'</code> (flat array)'}</span>
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label>WIQL Query (ADO)</label>
+          <textarea rows="8" style="font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;" placeholder="${esc(wiqlPlaceholder)}" oninput="queriesData[${idx}].wiqlTemplate=this.value;delete queriesData[${idx}].ado">${esc(q.wiqlTemplate||'')}</textarea>
+          <span class="hint">${wiqlHint}</span>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>JQL Template (Jira / Zephyr)</label>
+          <textarea oninput="queriesData[${idx}].jiraTemplate=this.value">${esc(q.jiraTemplate||'')}</textarea>
+          <span class="hint">${jqlHint}</span>
+        </div>
+
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Group by fields <span style="font-weight:400;color:var(--text-muted)">(comma-separated field names, optional)</span></label>
+          <input type="text" value="${esc(groupByFields)}" placeholder="e.g. severity, priority, owner, state" oninput="queriesData[${idx}].groupByFields=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
+          <span class="hint">${groupByHint}</span>
+        </div>
+      </div>
+    </td>`;
+    tbody.appendChild(detail);
+  });
+}
+
+function toggleQueryDetail(idx) {
+  const detail = document.getElementById(`qdetail-${idx}`);
+  const arrow  = document.getElementById(`qarrow-${idx}`);
+  const row    = document.getElementById(`qrow-${idx}`);
+  const isOpen = detail.style.display !== 'none';
+  detail.style.display = isOpen ? 'none' : 'table-row';
+  arrow.classList.toggle('open', !isOpen);
+  row.classList.toggle('expanded', !isOpen);
+}
+
+function addQuery() {
+  queriesData.push({
+    key: 'newQuery', label: 'New query', enabled: true,
+    scope: 'workstream', groupByFields: [],
+    wiqlTemplate: '', jiraTemplate: '',
+  });
+  renderQueries();
+}
+
+function deleteQuery(idx) {
+  queriesData.splice(idx, 1);
+  renderQueries();
+}
+
+async function saveQueries() {
+  try {
+    const config = cachedConfig || await api('GET', '/api/config');
+    config.queries = queriesData;
+    await api('PUT', '/api/config', config);
+    cachedConfig = config;
+    toast('Queries saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ── Settings tab ──────────────────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    cachedConfig = cachedConfig || await api('GET', '/api/config');
+    const s = cachedConfig.settings || {};
+    document.getElementById('sett-fetchTestStats').checked = s.fetchTestStats !== false;
+    const formats = s.outputFormats || ['ppt'];
+    document.getElementById('fmt-ppt').checked        = formats.includes('ppt');
+    document.getElementById('fmt-ai-summary').checked = formats.includes('ai-summary');
+  } catch (e) {
+    toast('Failed to load settings: ' + e.message, 'error');
+  }
+}
+
+async function saveSettings() {
+  try {
+    const fetchTestStats = document.getElementById('sett-fetchTestStats').checked;
+    const outputFormats  = [];
+    if (document.getElementById('fmt-ppt').checked)        outputFormats.push('ppt');
+    if (document.getElementById('fmt-ai-summary').checked) outputFormats.push('ai-summary');
+
+    const config = cachedConfig || await api('GET', '/api/config');
+    config.settings = { ...config.settings, fetchTestStats, outputFormats };
+    await api('PUT', '/api/config', config);
+    cachedConfig = config;
+
+    // Also sync OUTPUT_FORMAT to .env
+    await api('PUT', '/api/env', { updates: { OUTPUT_FORMAT: outputFormats.join(',') || 'ppt' } });
+    toast('Settings saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+// ── Run tab ───────────────────────────────────────────────────────────────────
+function setRunStatus(running, text) {
+  isRunning = running;
+  const btn = document.getElementById('run-btn');
+  btn.textContent = running ? 'Stop (kill process)' : 'Run Report';
+  btn.classList.toggle('running', running);
+
+  const statusEl = document.getElementById('run-status');
+  if (running) {
+    statusEl.innerHTML = `<div class="pulse"></div> ${text || 'Running...'}`;
+  } else {
+    statusEl.innerHTML = text ? `<span>${text}</span>` : '';
+  }
+}
+
+async function toggleRun() {
+  if (isRunning) {
+    // No kill endpoint — just disconnect SSE; process runs to completion
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    setRunStatus(false, 'Disconnected from stream');
+    return;
+  }
+  startRun();
+}
+
+async function startRun() {
+  clearTerminal();
+  try {
+    const { pid } = await api('POST', '/api/run');
+    setRunStatus(true, `PID ${pid}`);
+    connectSSE();
+  } catch (e) {
+    if (e.message.startsWith('409')) {
+      // Already running — just connect to stream
+      setRunStatus(true, 'Connecting to existing run...');
+      connectSSE();
+    } else {
+      toast('Failed to start: ' + e.message, 'error');
+    }
+  }
+}
+
+function connectSSE() {
+  if (sseSource) sseSource.close();
+  const term = document.getElementById('terminal');
+
+  sseSource = new EventSource('/api/run/stream');
+  sseSource.onmessage = ev => {
+    const line = JSON.parse(ev.data);
+    if (term.querySelector('.terminal-placeholder')) term.innerHTML = '';
+    const div = document.createElement('div');
+    const ts  = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+    const isExit = line.startsWith('[Process exited');
+    const isErr  = line.includes('Error') || line.includes('fatal') || line.includes('Failed');
+    div.innerHTML = `<span class="line-ts">${ts}</span>${escHtml(line)}`;
+    if (isExit) div.className = line.includes('code 0') ? 'term-exit-ok' : 'term-exit-err';
+    term.appendChild(div);
+    term.scrollTop = term.scrollHeight;
+
+    if (isExit) {
+      const ok = line.includes('code 0');
+      setRunStatus(false, ok ? 'Completed successfully' : 'Exited with errors');
+      if (sseSource) { sseSource.close(); sseSource = null; }
+    }
+  };
+  sseSource.onerror = () => {
+    // SSE connection closed (server restarted, etc.)
+    if (sseSource) { sseSource.close(); sseSource = null; }
+    // Check if actually still running
+    api('GET', '/api/run/status').then(s => {
+      if (!s.running) setRunStatus(false, '');
+    }).catch(() => {});
+  };
+}
+
+function clearTerminal() {
+  const term = document.getElementById('terminal');
+  term.innerHTML = '<span class="terminal-placeholder">Output will appear here when the report runs...</span>';
+}
+
+// ── Utility helpers ───────────────────────────────────────────────────────────
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function setDeep(obj, path, value) {
+  const parts = path.split('.');
+  let cur = obj;
+  for (let i = 0; i < parts.length - 1; i++) {
+    if (!cur[parts[i]]) cur[parts[i]] = {};
+    cur = cur[parts[i]];
+  }
+  cur[parts[parts.length - 1]] = value;
+}
+
+// ── Variables tab ─────────────────────────────────────────────────────────────
+let variablesData = [];
+
+async function loadVariables() {
+  try {
+    const [mappings, paths] = await Promise.all([
+      api('GET', '/api/variables'),
+      api('GET', '/api/data-paths'),
+    ]);
+    variablesData = mappings.map(m => ({ ...m }));
+    renderVariables();
+    renderDataPaths(paths);
+  } catch (e) {
+    toast('Failed to load variables: ' + e.message, 'error');
+  }
+}
+
+function renderVariables() {
+  const tbody = document.getElementById('var-tbody');
+  tbody.innerHTML = '';
+  if (variablesData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-muted);text-align:center;padding:20px 12px;">No mappings yet — click "Add Variable" to create one, or leave empty to use variables.js.</td></tr>';
+    return;
+  }
+  variablesData.forEach((v, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td><input type="text" value="${esc(v.token || '')}" placeholder="TOKEN" oninput="variablesData[${idx}].token=this.value"></td>` +
+      `<td><input type="text" value="${esc(v.path  || '')}" placeholder="d.stats.PDM.planned" style="font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;" oninput="variablesData[${idx}].path=this.value"></td>` +
+      `<td class="td-actions"><button class="btn btn-danger btn-sm" onclick="deleteVariable(${idx})">Remove</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function addVariable() {
+  variablesData.push({ token: '', path: '' });
+  renderVariables();
+  const inputs = document.querySelectorAll('#var-tbody input[type="text"]');
+  if (inputs.length) inputs[inputs.length - 2].focus(); // focus the token column of last row
+}
+
+function deleteVariable(idx) {
+  variablesData.splice(idx, 1);
+  renderVariables();
+}
+
+async function saveVariables() {
+  try {
+    await api('PUT', '/api/variables', { variableMappings: variablesData });
+    toast('Mappings saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+function groupPath(p) {
+  if (p.startsWith('d.stats.')) return 'Test Stats';
+  if (p.startsWith('d.consolidatedData.') || p.includes('consolidatedData')) return 'Overall Totals';
+  // GroupBy results: d.<key>By<Field>.total  or  d.<key>By<Field>['value']  or  d.<key>By<Field>[n]
+  if (/^d\.\w+By[A-Z]\w+(\.|(\[))/.test(p)) return 'GroupBy Results';
+  if (p.includes('Total') || p.includes('.length') || p.startsWith('Object.values')) return 'Query Counts';
+  if (p.startsWith('new Date')) return 'Utilities';
+  return 'Query Counts';
+}
+
+function renderDataPaths(paths) {
+  const panel = document.getElementById('var-paths-panel');
+  panel.innerHTML = '';
+
+  const groupOrder = ['Test Stats', 'Overall Totals', 'Query Counts', 'GroupBy Results', 'Utilities'];
+  const grouped = {};
+  for (const g of groupOrder) grouped[g] = [];
+
+  for (const p of paths) {
+    const g = groupPath(p);
+    if (!grouped[g]) grouped[g] = [];
+    grouped[g].push(p);
+  }
+
+  let first = true;
+  for (const g of groupOrder) {
+    if (!grouped[g] || grouped[g].length === 0) continue;
+    const label = document.createElement('div');
+    label.className = 'var-group-label';
+    if (first) { label.style.paddingTop = '0'; first = false; }
+    label.textContent = g;
+    panel.appendChild(label);
+
+    for (const p of grouped[g]) {
+      const item = document.createElement('div');
+      item.className = 'var-path-item';
+      item.textContent = p;
+      item.title = 'Click to copy';
+      item.onclick = () => copyDataPath(item, p);
+      panel.appendChild(item);
+    }
+  }
+}
+
+function copyDataPath(el, text) {
+  const showBadge = () => {
+    const badge = document.createElement('span');
+    badge.className = 'copied-badge';
+    badge.textContent = 'Copied!';
+    el.appendChild(badge);
+    setTimeout(() => badge.remove(), 1500);
+  };
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(showBadge).catch(() => {
+      fallbackCopy(text);
+      showBadge();
+    });
+  } else {
+    fallbackCopy(text);
+    showBadge();
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch {}
+  ta.remove();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+// Pre-load the credentials tab (it's the default active tab)
+tabLoaded['credentials'] = true;
+loadTab('credentials');
+
+// Show current port
+fetch('/api/run/status').then(() => {
+  const m = window.location.port;
+  if (m) document.getElementById('server-port').textContent = `Port ${m}`;
+}).catch(() => {});
+</script>

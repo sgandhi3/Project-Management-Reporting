@@ -1,3 +1,10 @@
+import { readFileSync, existsSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const UI_CONFIG_PATH = path.join(__dirname, 'ui-config.json');
+const uiConfig = existsSync(UI_CONFIG_PATH) ? JSON.parse(readFileSync(UI_CONFIG_PATH, 'utf8')) : null;
+
 // ─── ADO field definitions ─────────────────────────────────────────────────────
 //
 // Shared across all ADO query blocks. Add a field here and expose it via
@@ -66,10 +73,10 @@ export const ZEPHYR_STATUS_MAP = {
 // One entry per workstream. The name is used as the key everywhere — in the data
 // object, in variables.js (d.stats.PDM), and in the snapshot printout.
 //
-// Fill in only the fields for the provider you're using (set in TEST_PROVIDER in .env).
-// Fields for other providers are ignored.
+// When ui-config.json exists its workstreams take precedence; otherwise the
+// env-var fallback below is used.
 
-export const WORKSTREAMS = [
+export const WORKSTREAMS = uiConfig?.workstreams?.length ? uiConfig.workstreams : [
   {
     name: 'PDM',
     // ADO
@@ -114,146 +121,95 @@ export const WORKSTREAMS = [
 
 // ─── Queries ───────────────────────────────────────────────────────────────────
 //
-// Define any number of data fetches here. Each entry runs once per workstream.
-// Results land at d[key][workstreamName] and are accessible in variables.js.
+// Each entry defines one data fetch. Two modes (set via `scope`):
 //
-// Each query has a section per provider written in that provider's native language:
-//   ado  — WIQL config object (workItemType, excludeStates, fields, fieldMap, orderBy)
-//   jira — function(ws) returning a JQL string (used by both Jira and Zephyr Scale)
+//   scope: 'workstream' (default)
+//     Runs once per workstream, filtered by that workstream's area path.
+//     Results: d[key] = { PDM: [...], Benefits: [...], ... }
+//              d[key+'Total'] = total item count across all workstreams
 //
-// To add a query: duplicate any block, give it a new key, adjust the config.
-// To remove a query: delete the block. Nothing else needs to change.
+//   scope: 'global'
+//     Runs ONCE for the whole project with no area-path filter.
+//     Results: d[key] = [...flat array of all items...]
+//
+// groupByFields: ['severity', 'priority']
+//   Automatically produces d[key+'BySeverity'], d[key+'ByPriority'], etc.
+//   Each groupBy result: { total: N, 'value1': count, 'value2': count, ... }
+//
+// When ui-config.json exists its queries take precedence via buildQueriesFromConfig.
 
-export const QUERIES = [
-  {
-    key:      'bugs',
-    label:    'Open bugs',
-    fallback: [],
+function buildQueriesFromConfig(queryConfigs) {
+  return queryConfigs
+    .filter(q => q.enabled !== false)
+    .map(q => {
+      const groupByFields = Array.isArray(q.groupByFields)
+        ? q.groupByFields
+        : (q.groupByFields ? String(q.groupByFields).split(',').map(s => s.trim()).filter(Boolean) : []);
 
-    ado: {
-      workItemType:  'Bug',
-      excludeStates: ['Closed', 'Resolved'],
-      orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
-      fields:        ADO_FIELDS,
-      fieldMap:      ADO_FIELD_MAP,
-    },
-
-    jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND status != Resolved and status != Closed`,
-
-    // consolidateKey sets the name used in variables.js: d.allBugs
-    // consolidate receives { PDM: [...], Benefits: [...], ... } and returns whatever you want
-    consolidateKey: 'bugsBySeverityPriority',
-    consolidate: allResults => {
-      let total = 0, sev1 = 0, sev2 = 0, sev3 = 0, sev4 = 0;
-      let pri1  = 0, pri2  = 0, pri3  = 0, pri4  = 0;
-      for (const bugs of Object.values(allResults)) {
-        for (const b of bugs) {
-          total++;
-          if      (b.severity === '1 - Critical') sev1++;
-          else if (b.severity === '2 - High')     sev2++;
-          else if (b.severity === '3 - Medium')   sev3++;
-          else if (b.severity === '4 - Low')      sev4++;
-
-          const p = String(b.priority || '').toLowerCase();
-          if      (p === '1' || p === 'highest' || p === 'critical') pri1++;
-          else if (p === '2' || p === 'high')                        pri2++;
-          else if (p === '3' || p === 'medium')                      pri3++;
-          else if (p === '4' || p === 'low' || p === 'lowest')       pri4++;
-        }
-      }
       return {
-        total: total,
-        severity: { total, sev1, sev2, sev3, sev4 },
-        priority: { pri1, pri2, pri3, pri4 },
+        key:           q.key,
+        label:         q.label,
+        fallback:      [],
+        scope:         q.scope || 'workstream',
+        groupByFields,
+        ...(q.wiqlTemplate ? {
+          ado: ws => ({
+            wiql: q.wiqlTemplate.replace(/\{\{(\w+)\}\}/g, (_, k) => (ws && ws[k]) || process.env[k] || ''),
+            fieldMap: ADO_FIELD_MAP,
+          }),
+        } : q.ado ? {
+          ado: {
+            workItemType:  q.ado.workItemType,
+            excludeStates: q.ado.excludeStates || [],
+            includeStates: q.ado.includeStates || [],
+            orderBy:       q.ado.orderBy || '[System.Id] ASC',
+            fields:        ADO_FIELDS,
+            fieldMap:      ADO_FIELD_MAP,
+          },
+        } : {}),
+        ...(q.jiraTemplate ? {
+          jira: ws => q.jiraTemplate.replace(/\{\{(\w+)\}\}/g, (_, k) => (ws && ws[k]) || process.env[k] || ''),
+        } : {}),
       };
-    },
+    });
+}
 
-  },
+export const QUERIES = uiConfig?.queries?.length
+  ? buildQueriesFromConfig(uiConfig.queries)
+  : [
     {
-    key:      'closedBugs',
-    label:    'Closed bugs',
-    fallback: [],
+      key:           'bugs',
+      label:         'Open bugs',
+      fallback:      [],
+      scope:         'workstream',
+      groupByFields: ['severity', 'priority'],
 
-    ado: {
-      workItemType:  'Bug',
-      excludeStates: ['Active', 'Resolved', 'New','Blocked'],
-      orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
-      fields:        ADO_FIELDS,
-      fieldMap:      ADO_FIELD_MAP,
+      ado: {
+        workItemType:  'Bug',
+        excludeStates: ['Closed', 'Resolved'],
+        orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
+        fields:        ADO_FIELDS,
+        fieldMap:      ADO_FIELD_MAP,
+      },
+
+      jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND status != Resolved and status != Closed`,
     },
 
-    jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory != Done ORDER BY priority ASC`,
+    {
+      key:           'closedBugs',
+      label:         'Closed bugs',
+      fallback:      [],
+      scope:         'workstream',
+      groupByFields: [],
 
-    // consolidateKey sets the name used in variables.js: d.allBugs
-    // consolidate receives { PDM: [...], Benefits: [...], ... } and returns whatever you want
-   // consolidateKey: 'bugsBySeverity',
-    // consolidate: allResults => {
-    //   let total = 0, sev1 = 0, sev2 = 0, sev3 = 0, sev4 = 0;
-    //   for (const bugs of Object.values(allResults)) {
-    //     for (const b of bugs) {
-    //       total++;
-    //       if      (b.severity === '1 - Critical') sev1++;
-    //       else if (b.severity === '2 - High')     sev2++;
-    //       else if (b.severity === '3 - Medium')   sev3++;
-    //       else if (b.severity === '4 - Low')      sev4++;
-    //     }
-    //   }
-    //   return { total, sev1, sev2, sev3, sev4 };
-    // },
-  },
+      ado: {
+        workItemType:  'Bug',
+        excludeStates: ['Active', 'Resolved', 'New', 'Blocked'],
+        orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
+        fields:        ADO_FIELDS,
+        fieldMap:      ADO_FIELD_MAP,
+      },
 
-  // ── Example: open tasks with a count-by-month consolidation ───────────────
-  // Adding consolidate lets you roll up any query into a summary object that
-  // you can then reference in variables.js however you like.
-  //
-  // {
-  //   key:      'openTasks',
-  //   label:    'Open tasks',
-  //   fallback: [],
-  //   ado: {
-  //     workItemType:  'Task',
-  //     excludeStates: ['Closed', 'Done'],
-  //     orderBy:       '[System.CreatedDate] ASC',
-  //     fields:        ADO_FIELDS,
-  //     fieldMap:      ADO_FIELD_MAP,
-  //   },
-  //   jira: ws => `project = "${ws.projectKey}" AND issuetype = Task AND statusCategory != Done ORDER BY created ASC`,
-  //
-  //   // Produces d.tasksByMonth = { '2026-01': 5, '2026-02': 6, '2026-03': 10, ... }
-  //   consolidateKey: 'tasksByMonth',
-  //   consolidate: allResults => {
-  //     const byMonth = {};
-  //     for (const item of Object.values(allResults).flat()) {
-  //       const month = (item.createdDate || '').slice(0, 7); // "2026-01"
-  //       if (month) byMonth[month] = (byMonth[month] || 0) + 1;
-  //     }
-  //     return byMonth;
-  //   },
-  // },
-
-  // ── Example: closed bugs ──────────────────────────────────────────────────
-  // {
-  //   key:      'closedBugs',
-  //   label:    'Closed bugs',
-  //   fallback: [],
-  //   ado: {
-  //     workItemType:  'Bug',
-  //     excludeStates: [],
-  //     includeStates: ['Closed', 'Resolved'],
-  //     orderBy:       '[System.CreatedDate] DESC',
-  //     fields:        ADO_FIELDS,
-  //     fieldMap:      ADO_FIELD_MAP,
-  //   },
-  //   jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory = Done`,
-  //
-  //   consolidateKey: 'closedBugsByMonth',
-  //   consolidate: allResults => {
-  //     const byMonth = {};
-  //     for (const item of Object.values(allResults).flat()) {
-  //       const month = (item.createdDate || '').slice(0, 7);
-  //       if (month) byMonth[month] = (byMonth[month] || 0) + 1;
-  //     }
-  //     return byMonth;
-  //   },
-  // },
-];
+      jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory = Done ORDER BY priority ASC`,
+    },
+  ];

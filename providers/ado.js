@@ -95,33 +95,41 @@ export async function fetchTestStats({ name, planId, sitSuiteId }) {
 
 // ─── Generic WIQL query runner ────────────────────────────────────────────────
 
-// Runs a WIQL query built from the ado config block in query-config.js QUERIES.
-// config shape: { workItemType, excludeStates, includeStates?, orderBy, fields, fieldMap }
+// config can be one of three shapes:
+//   { wiql: string, fieldMap }      — raw WIQL string (from UI / wiqlTemplate in ui-config.json)
+//   { workItemType, excludeStates, includeStates?, orderBy, fields, fieldMap } — structured (config.js hardcoded)
 export async function runQuery({ name, areaPath }, config) {
-  if (!areaPath) {
-    console.warn(`  ⚠  ${name}: no areaPath configured, skipping.`);
+  if (!config) {
+    console.warn(`  ⚠  ${name}: no ADO query config provided, skipping.`);
     return [];
   }
 
-  const excludeClauses = (config.excludeStates || []).map(s => `[System.State] <> '${s}'`);
-  const includeClauses = (config.includeStates || []).map(s => `[System.State] = '${s}'`);
-  const stateClauses   = [...excludeClauses, ...includeClauses];
+  let wiqlQuery;
 
-  const wiql = {
-    query: `SELECT ${config.fields.join(', ')}
+  if (config.wiql) {
+    // Raw WIQL — use as-is (user pasted from ADO query editor)
+    wiqlQuery = config.wiql;
+  } else {
+    // Structured config — build WIQL from parts
+    // areaPath is optional: when empty the query runs project-wide (global scope)
+    const excludeClauses = (config.excludeStates || []).map(s => `[System.State] <> '${s}'`);
+    const includeClauses = (config.includeStates || []).map(s => `[System.State] = '${s}'`);
+    const stateClauses   = [...excludeClauses, ...includeClauses];
+    const areaClause     = areaPath ? `AND [System.AreaPath] UNDER '${areaPath}'` : '';
+    wiqlQuery = `SELECT ${config.fields.join(', ')}
     FROM WorkItems
     WHERE [System.WorkItemType] = '${config.workItemType}'
       AND [System.TeamProject] = '${PROJECT}'
       ${stateClauses.length ? 'AND ' + stateClauses.join(' AND ') : ''}
-      AND [System.AreaPath] UNDER '${areaPath}'
-    ORDER BY ${config.orderBy}`,
-  };
+      ${areaClause}
+    ORDER BY ${config.orderBy}`;
+  }
 
-  if (process.env.DEBUG) console.log(`\n  [DEBUG] ${name} WIQL:\n${wiql.query}\n`);
+  if (process.env.DEBUG) console.log(`\n  [DEBUG] ${name} WIQL:\n${wiqlQuery}\n`);
 
   let ids;
   try {
-    const data = await post(`${baseUrl()}/wit/wiql?api-version=7.0`, wiql);
+    const data = await post(`${baseUrl()}/wit/wiql?api-version=7.0`, { query: wiqlQuery });
     ids = (data.workItems || []).map(w => w.id);
   } catch (e) {
     console.warn(`  ⚠  ${name}: WIQL query failed — ${e.message.split('\n')[0]}`);
