@@ -636,6 +636,36 @@
       </div>
     </div>
 
+    <div class="card">
+      <div class="card-title">SharePoint Upload</div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="env-SHAREPOINT_TENANT_ID">Tenant ID</label>
+          <input type="text" id="env-SHAREPOINT_TENANT_ID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          <span class="hint">Azure AD → Overview → Directory (tenant) ID</span>
+        </div>
+        <div class="form-group">
+          <label for="env-SHAREPOINT_CLIENT_ID">Client ID</label>
+          <input type="text" id="env-SHAREPOINT_CLIENT_ID" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx">
+          <span class="hint">App registration → Overview → Application (client) ID</span>
+        </div>
+        <div class="form-group">
+          <label for="env-SHAREPOINT_CLIENT_SECRET">Client Secret</label>
+          <input type="password" id="env-SHAREPOINT_CLIENT_SECRET" placeholder="Leave blank to keep current value" autocomplete="new-password">
+          <span class="hint">App registration → Certificates &amp; secrets → Value</span>
+        </div>
+        <div class="form-group">
+          <label for="env-SHAREPOINT_SITE_URL">Site URL</label>
+          <input type="text" id="env-SHAREPOINT_SITE_URL" placeholder="https://myorg.sharepoint.com/sites/Weekly-Reports">
+        </div>
+        <div class="form-group">
+          <label for="env-SHAREPOINT_FOLDER">Upload Folder <span style="font-weight:400;color:var(--text-muted)">(optional)</span></label>
+          <input type="text" id="env-SHAREPOINT_FOLDER" placeholder="Shared Documents/Weekly Status">
+          <span class="hint">Path within the document library, no leading slash. Defaults to "Shared Documents".</span>
+        </div>
+      </div>
+    </div>
+
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:4px;">
       <button class="btn btn-primary" onclick="saveCredentials()">Save credentials</button>
     </div>
@@ -742,6 +772,36 @@
             <input type="checkbox" id="fmt-ai-summary" value="ai-summary">
             <span><strong>ai-summary</strong> — AI-generated executive summary (requires ANTHROPIC_API_KEY)</span>
           </label>
+          <label class="checkbox-item">
+            <input type="checkbox" id="fmt-sharepoint" value="sharepoint">
+            <span><strong>sharepoint</strong> — Upload generated files to SharePoint (requires SHAREPOINT_* credentials)</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Scheduled Runs</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Enable schedule</div>
+          <div class="setting-desc">Automatically run the report on a recurring schedule while the UI server is running</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="sett-scheduleEnabled" onchange="toggleScheduleFields()">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div id="schedule-fields" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <div class="form-group" style="max-width:340px;">
+          <label>Cron expression</label>
+          <input type="text" id="sett-scheduleCron" placeholder="0 9 * * 1" oninput="updateCronPreview()">
+          <span class="hint" id="cron-preview" style="font-size:12px;color:var(--text-muted);">—</span>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 9 * * 1')">Mon 9am</button>
+          <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 9 * * 1-5')">Weekdays 9am</button>
+          <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 8 * * *')">Daily 8am</button>
+          <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 9 * * 5')">Fri 9am</button>
         </div>
       </div>
     </div>
@@ -886,9 +946,10 @@ function toast(msg, type = 'success') {
 }
 
 // ── Credentials tab ───────────────────────────────────────────────────────────
-const SENSITIVE_FIELDS = ['ADO_PAT', 'JIRA_API_TOKEN', 'ZEPHYR_TOKEN', 'ANTHROPIC_API_KEY'];
+const SENSITIVE_FIELDS = ['ADO_PAT', 'JIRA_API_TOKEN', 'ZEPHYR_TOKEN', 'ANTHROPIC_API_KEY', 'SHAREPOINT_CLIENT_SECRET'];
 const PLAIN_FIELDS     = ['TEST_PROVIDER','ADO_ORG','ADO_PROJECT','JIRA_DOMAIN','JIRA_EMAIL',
-                          'PPTX_TEMPLATE','SUMMARY_NOTES_FILE','PLAN_ID'];
+                          'PPTX_TEMPLATE','SUMMARY_NOTES_FILE','PLAN_ID',
+                          'SHAREPOINT_TENANT_ID','SHAREPOINT_CLIENT_ID','SHAREPOINT_SITE_URL','SHAREPOINT_FOLDER'];
 
 async function loadCredentials() {
   try {
@@ -1109,6 +1170,14 @@ function renderQueries() {
           <input type="text" value="${esc(groupByFields)}" placeholder="e.g. severity, priority, owner, state" oninput="queriesData[${idx}].groupByFields=this.value.split(',').map(s=>s.trim()).filter(Boolean)">
           <span class="hint">${groupByHint}</span>
         </div>
+
+        <div style="grid-column:1/-1;border-top:1px solid var(--border);padding-top:14px;">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <button class="btn btn-secondary" onclick="testQuery(${idx})">Test query</button>
+            <span style="font-size:12px;color:var(--text-muted);">Runs against the current credentials and returns a count + sample item so you can verify field names.</span>
+          </div>
+          <div id="qtest-${idx}" style="display:none;margin-top:12px;background:var(--surface-alt,var(--surface));border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;white-space:pre-wrap;word-break:break-all;max-height:240px;overflow:auto;"></div>
+        </div>
       </div>
     </td>`;
     tbody.appendChild(detail);
@@ -1158,8 +1227,15 @@ async function loadSettings() {
     const s = cachedConfig.settings || {};
     document.getElementById('sett-fetchTestStats').checked = s.fetchTestStats !== false;
     const formats = s.outputFormats || ['ppt'];
-    document.getElementById('fmt-ppt').checked        = formats.includes('ppt');
-    document.getElementById('fmt-ai-summary').checked = formats.includes('ai-summary');
+    document.getElementById('fmt-ppt').checked          = formats.includes('ppt');
+    document.getElementById('fmt-ai-summary').checked   = formats.includes('ai-summary');
+    document.getElementById('fmt-sharepoint').checked   = formats.includes('sharepoint');
+
+    const sched = s.schedule || {};
+    document.getElementById('sett-scheduleEnabled').checked = !!sched.enabled;
+    document.getElementById('sett-scheduleCron').value = sched.cron || '0 9 * * 1';
+    toggleScheduleFields();
+    updateCronPreview();
   } catch (e) {
     toast('Failed to load settings: ' + e.message, 'error');
   }
@@ -1171,17 +1247,70 @@ async function saveSettings() {
     const outputFormats  = [];
     if (document.getElementById('fmt-ppt').checked)        outputFormats.push('ppt');
     if (document.getElementById('fmt-ai-summary').checked) outputFormats.push('ai-summary');
+    if (document.getElementById('fmt-sharepoint').checked) outputFormats.push('sharepoint');
+
+    const schedEnabled = document.getElementById('sett-scheduleEnabled').checked;
+    const schedCron    = document.getElementById('sett-scheduleCron').value.trim() || '0 9 * * 1';
 
     const config = cachedConfig || await api('GET', '/api/config');
-    config.settings = { ...config.settings, fetchTestStats, outputFormats };
+    config.settings = {
+      ...config.settings,
+      fetchTestStats,
+      outputFormats,
+      schedule: { enabled: schedEnabled, cron: schedCron },
+    };
     await api('PUT', '/api/config', config);
     cachedConfig = config;
 
-    // Also sync OUTPUT_FORMAT to .env
-    await api('PUT', '/api/env', { updates: { OUTPUT_FORMAT: outputFormats.join(',') || 'ppt' } });
+    // Also sync OUTPUT_FORMAT to .env (without sharepoint — it's env-gated)
+    const envFormats = outputFormats.filter(f => f !== 'sharepoint');
+    await api('PUT', '/api/env', { updates: { OUTPUT_FORMAT: envFormats.join(',') || 'ppt' } });
     toast('Settings saved');
   } catch (e) {
     toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+function toggleScheduleFields() {
+  const enabled = document.getElementById('sett-scheduleEnabled').checked;
+  document.getElementById('schedule-fields').style.display = enabled ? 'block' : 'none';
+}
+
+function setCron(expr) {
+  document.getElementById('sett-scheduleCron').value = expr;
+  updateCronPreview();
+}
+
+const CRON_DESC = {
+  '0 9 * * 1':   'Every Monday at 9:00 AM',
+  '0 9 * * 1-5': 'Every weekday (Mon–Fri) at 9:00 AM',
+  '0 8 * * *':   'Every day at 8:00 AM',
+  '0 9 * * 5':   'Every Friday at 9:00 AM',
+};
+
+function updateCronPreview() {
+  const expr = document.getElementById('sett-scheduleCron').value.trim();
+  const el   = document.getElementById('cron-preview');
+  if (!expr) { el.textContent = '—'; return; }
+  const parts = expr.split(/\s+/);
+  if (parts.length !== 5) { el.textContent = 'Invalid cron — needs 5 fields (min hour dom mon dow)'; return; }
+  el.textContent = CRON_DESC[expr] || `Cron: ${expr}`;
+}
+
+async function testQuery(idx) {
+  const q   = queriesData[idx];
+  const out = document.getElementById(`qtest-${idx}`);
+  out.style.display = 'block';
+  out.textContent   = 'Testing…';
+  try {
+    const result = await api('POST', '/api/query/test', {
+      wiqlTemplate: q.wiqlTemplate || '',
+      jiraTemplate: q.jiraTemplate || '',
+      scope:        q.scope || 'workstream',
+    });
+    out.textContent = JSON.stringify(result, null, 2);
+  } catch (e) {
+    out.textContent = 'Error: ' + e.message;
   }
 }
 

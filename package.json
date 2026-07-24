@@ -16,6 +16,7 @@
     "@anthropic-ai/sdk": "^0.113.0",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "node-cron": "^4.6.0",
     "node-fetch": "^3.3.2",
     "pizzip": "^3.2.0"
   }

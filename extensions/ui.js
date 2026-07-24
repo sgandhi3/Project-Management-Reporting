@@ -11,6 +11,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import cron from 'node-cron';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -22,10 +23,33 @@ const UI_CONFIG_PATH = path.join(projectRoot, 'ui-config.json');
 // Sensitive key pattern: mask values whose key matches
 const SENSITIVE_RE = /TOKEN|PAT|KEY|SECRET|PASSWORD/i;
 
+// ─── Scheduler ────────────────────────────────────────────────────────────────
+
+let scheduledTask = null;
+
+function applySchedule(settings) {
+  if (scheduledTask) { scheduledTask.stop(); scheduledTask = null; }
+  const s = settings?.schedule;
+  if (!s?.enabled || !s?.cron) return;
+  if (!cron.validate(s.cron)) {
+    console.warn(`[Scheduler] Invalid cron expression: "${s.cron}"`);
+    return;
+  }
+  scheduledTask = cron.schedule(s.cron, () => {
+    console.log(`[Scheduler] Triggering scheduled run (${s.cron})...`);
+    triggerRun();
+  });
+  console.log(`[Scheduler] Active — cron: ${s.cron}`);
+}
+
 // ─── Default ui-config (written on first GET /api/config) ────────────────────
 
 const DEFAULT_UI_CONFIG = {
-  settings: { fetchTestStats: true, outputFormats: ['ppt'] },
+  settings: {
+    fetchTestStats: true,
+    outputFormats: ['ppt'],
+    schedule: { enabled: false, cron: '0 9 * * 1' },
+  },
   workstreams: [
     { name: 'PDM',        planId: '', sitSuiteId: '', areaPath: '', projectKey: '', testCycleKey: '' },
     { name: 'Benefits',   planId: '', sitSuiteId: '', areaPath: '', projectKey: '', testCycleKey: '' },
@@ -117,6 +141,7 @@ app.get('/api/config', (_req, res) => {
 app.put('/api/config', (req, res) => {
   try {
     fs.writeFileSync(UI_CONFIG_PATH, JSON.stringify(req.body, null, 2));
+    applySchedule(req.body.settings);  // restart scheduler if schedule changed
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -147,43 +172,32 @@ app.put('/api/env', (req, res) => {
 
 // ─── Run API ─────────────────────────────────────────────────────────────────
 
-app.post('/api/run', (_req, res) => {
-  if (currentProcess) {
-    return res.status(409).json({ error: 'A run is already in progress' });
-  }
-
+function triggerRun() {
+  if (currentProcess) return null;  // already running
   logBuffer = [];
-
-  // Reload .env so the child picks up the latest values written via the UI
-  const envVars = readEnvFile();
-  const childEnv = { ...process.env, ...envVars };
-
-  currentProcess = spawn('node', ['gather-data.js'], {
-    cwd: projectRoot,
-    env: childEnv,
-  });
-
-  const pid = currentProcess.pid;
-
+  const childEnv = { ...process.env, ...readEnvFile() };
+  currentProcess = spawn('node', ['gather-data.js'], { cwd: projectRoot, env: childEnv });
   const handleData = chunk => {
     for (const line of chunk.toString().split('\n')) {
       if (line) sendToClients(line);
     }
   };
-
   currentProcess.stdout.on('data', handleData);
   currentProcess.stderr.on('data', handleData);
-
   currentProcess.on('close', code => {
     sendToClients(`[Process exited with code ${code}]`);
     currentProcess = null;
   });
-
   currentProcess.on('error', err => {
     sendToClients(`[Spawn error: ${err.message}]`);
     currentProcess = null;
   });
+  return currentProcess.pid;
+}
 
+app.post('/api/run', (_req, res) => {
+  if (currentProcess) return res.status(409).json({ error: 'A run is already in progress' });
+  const pid = triggerRun();
   res.json({ pid });
 });
 
@@ -307,8 +321,78 @@ app.get('/api/data-paths', (_req, res) => {
   }
 });
 
+// ─── Query test API ───────────────────────────────────────────────────────────
+// Runs a single query in a fresh child process and returns field names + sample rows.
+// Body: { wiqlTemplate, jiraTemplate, scope, workstreamName? }
+
+app.post('/api/query/test', (req, res) => {
+  const { wiqlTemplate = '', jiraTemplate = '', scope = 'workstream', workstreamName } = req.body;
+  const envVars    = readEnvFile();
+  const uiCfg      = fs.existsSync(UI_CONFIG_PATH) ? JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8')) : {};
+  const workstreams = uiCfg.workstreams || [];
+  const ws          = (workstreamName ? workstreams.find(w => w.name === workstreamName) : null)
+                    || workstreams[0]
+                    || {};
+  const provider    = (envVars.TEST_PROVIDER || process.env.TEST_PROVIDER || 'ado').toLowerCase();
+
+  // Build a self-contained ES module script and pipe it via stdin
+  const script = `
+import { runQuery } from './providers/${provider}.js';
+import { ADO_FIELD_MAP } from './config.js';
+const ws       = ${JSON.stringify(ws)};
+const scope    = ${JSON.stringify(scope)};
+const provider = ${JSON.stringify(provider)};
+let config;
+if (provider === 'ado') {
+  const wiql = ${JSON.stringify(wiqlTemplate)}.replace(/\\{\\{(\\w+)\\}\\}/g, (_, k) => ws[k] || process.env[k] || '');
+  config = { wiql, fieldMap: ADO_FIELD_MAP };
+} else {
+  config = ${JSON.stringify(jiraTemplate)}.replace(/\\{\\{(\\w+)\\}\\}/g, (_, k) => ws[k] || process.env[k] || '');
+}
+const target = scope === 'global' ? { name: 'global', areaPath: '' } : ws;
+try {
+  const results = await runQuery(target, config);
+  process.stdout.write(JSON.stringify({
+    workstream: ws.name || '(none)',
+    count:  results.length,
+    fields: results[0] ? Object.keys(results[0]) : [],
+    sample: results.slice(0, 3),
+  }));
+} catch (e) {
+  process.stdout.write(JSON.stringify({ error: e.message.split('\\n')[0] }));
+}
+`;
+
+  const child = spawn('node', ['--input-type=module'], {
+    cwd: projectRoot,
+    env: { ...process.env, ...envVars },
+  });
+
+  let out = '', err = '';
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+  child.stdin.write(script);
+  child.stdin.end();
+
+  child.on('close', () => {
+    try {
+      res.json(JSON.parse(out));
+    } catch {
+      res.status(500).json({ error: err.split('\n').find(l => l.trim()) || out || 'No output' });
+    }
+  });
+  child.on('error', err => res.status(500).json({ error: err.message }));
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
   console.log(`MMO Report UI running at http://localhost:${PORT}`);
+  // Apply any saved schedule from ui-config.json on startup
+  if (fs.existsSync(UI_CONFIG_PATH)) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8'));
+      applySchedule(saved.settings);
+    } catch { /* ignore */ }
+  }
 });

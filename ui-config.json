@@ -220,9 +220,7 @@
       "label": "all bugs by state global",
       "enabled": true,
       "scope": "global",
-      "groupByFields": [
-        "severity"
-      ],
+      "groupByFields": [],
       "wiqlTemplate": "SELECT [System.Id], [System.Title], [System.State], [System.AreaPath], [System.AssignedTo], [System.CreatedDate], [Microsoft.VSTS.Common.Severity], [Microsoft.VSTS.Common.Priority] FROM WorkItems WHERE [System.WorkItemType] = 'Bug' AND [System.TeamProject] = '{{ADO_PROJECT}}'",
       "jiraTemplate": ""
     }
