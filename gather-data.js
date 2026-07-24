@@ -1,18 +1,10 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
 import { WORKSTREAMS, QUERIES } from './config.js';
 
-// ─── Provider selection ───────────────────────────────────────────────────────
-
-// Set TEST_PROVIDER in .env to switch between data sources.
-// Supported values: ado | jira
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
+const OUTPUTS  = (process.env.OUTPUT_FORMAT || 'ppt').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
 
-// Set OUTPUT_FORMAT in .env — comma-separated to run multiple extensions.
-// e.g. OUTPUT_FORMAT=ppt,ai-summary   runs both
-// Add more by creating extensions/<name>.js
-const OUTPUTS = (process.env.OUTPUT_FORMAT || 'ppt').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
-
-// ─── Data aggregation ─────────────────────────────────────────────────────────
+// ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sumStats(statsMap) {
   const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
@@ -22,13 +14,48 @@ function sumStats(statsMap) {
   return totals;
 }
 
+// Groups an array of items by a field value, returning { total, value: count, ... }
+function groupBy(items, field) {
+  const result = { total: items.length };
+  for (const item of items) {
+    const val = String(item[field] ?? '(none)');
+    result[val] = (result[val] || 0) + 1;
+  }
+  return result;
+}
+
 // ─── Orchestration ────────────────────────────────────────────────────────────
 
 async function collectAllData(provider) {
   console.log(`\nFetching data via ${PROVIDER} provider...\n`);
 
   const data = { stats: {} };
-  for (const q of QUERIES) data[q.key] = {};
+  for (const q of QUERIES) {
+    data[q.key] = q.scope === 'global' ? [] : {};
+  }
+
+  // ── Global queries — run once for the whole project, no area-path filter ────
+  const globalQueries = QUERIES.filter(q => q.scope === 'global');
+  if (globalQueries.length) {
+    console.log('Global queries:');
+    for (const q of globalQueries) {
+      process.stdout.write(`  ${q.label} (all workstreams)... `);
+      try {
+        const providerConfig = q[PROVIDER];
+        const config = typeof providerConfig === 'function' ? providerConfig({}) : providerConfig;
+        const result = await provider.runQuery({ name: 'global', areaPath: '' }, config);
+        data[q.key] = result;
+        console.log(`${result.length} found`);
+      } catch (e) {
+        console.log(`failed — ${e.message.split('\n')[0]}`);
+        data[q.key] = q.fallback ?? [];
+      }
+    }
+    console.log('');
+  }
+
+  // ── Per-workstream queries — run once per workstream ─────────────────────────
+  const wsQueries = QUERIES.filter(q => q.scope !== 'global');
 
   for (const ws of WORKSTREAMS) {
     console.log(`${ws.name}:`);
@@ -43,7 +70,7 @@ async function collectAllData(provider) {
       data.stats[ws.name] = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
     }
 
-    for (const q of QUERIES) {
+    for (const q of wsQueries) {
       process.stdout.write(`  ${q.label}... `);
       try {
         const providerConfig = q[PROVIDER];
@@ -53,13 +80,14 @@ async function collectAllData(provider) {
         console.log(Array.isArray(result) ? `${result.length} found` : JSON.stringify(result));
       } catch (e) {
         console.log(`failed — ${e.message.split('\n')[0]}`);
-        data[q.key][ws.name] = q.fallback;
+        data[q.key][ws.name] = q.fallback ?? [];
       }
     }
 
     console.log('');
   }
 
+  // ── Consolidated test stats ───────────────────────────────────────────────────
   data.consolidatedData = sumStats(data.stats);
   console.log('Overall Execution:'
     + '\n  Planned:     ' + data.consolidatedData.planned
@@ -69,11 +97,28 @@ async function collectAllData(provider) {
     + '\n  Not Started: ' + data.consolidatedData.notStarted
     + '\n  In Progress: ' + data.consolidatedData.inProgress + '\n');
 
+  // ── Auto-total for every per-workstream query (d.bugsTotal, etc.) ─────────────
+  for (const q of wsQueries) {
+    data[`${q.key}Total`] = Object.values(data[q.key])
+      .reduce((s, a) => s + (Array.isArray(a) ? a.length : 0), 0);
+  }
+
+  // ── Generic group-by aggregations ─────────────────────────────────────────────
+  // For each field in groupByFields, produce d.<key>By<Field> = { total, value: count, ... }
   for (const q of QUERIES) {
-    if (!q.consolidate) continue;
-    const key = q.consolidateKey || q.key + 'Summary';
-    data[key] = q.consolidate(data[q.key]);
-    console.log(`${key}:`, JSON.stringify(data[key]));
+    const fields = q.groupByFields || [];
+    if (!fields.length) continue;
+
+    const allItems = q.scope === 'global'
+      ? data[q.key]
+      : Object.values(data[q.key]).flat();
+
+    for (const field of fields) {
+      const cap = field.charAt(0).toUpperCase() + field.slice(1);
+      const key = `${q.key}By${cap}`;
+      data[key] = groupBy(allItems, field);
+      console.log(`${key}: total=${data[key].total}`);
+    }
   }
 
   return data;
@@ -99,40 +144,43 @@ function printDataSnapshot(data) {
   console.table([{ planned: c.planned, executed: c.executed, passed: c.passed, failed: c.failed, notStarted: c.notStarted, inProgress: c.inProgress }]);
 
   for (const q of QUERIES) {
-    const results = data[q.key] || {};
-    console.log(` d.${q.key}  (${q.label})\n`);
-    const rows = Object.entries(results).map(([ws, items]) => {
-      const row = { workstream: ws, count: Array.isArray(items) ? items.length : '—' };
-      const sample = Array.isArray(items) ? items[0] : items;
-      if (sample) row['available fields'] = Object.keys(sample).join(', ');
-      return row;
-    });
-    console.table(rows);
+    const results = data[q.key];
 
-    const firstWs    = Object.values(results).find(arr => Array.isArray(arr) && arr.length > 0);
-    const sampleItem = firstWs?.[0];
-    if (sampleItem) {
-      console.log(`  sample item → d.${q.key}.<workstream>[0]:`);
-      console.table([sampleItem]);
+    if (q.scope === 'global') {
+      const items = Array.isArray(results) ? results : [];
+      console.log(` d.${q.key}  (${q.label} — global)   total: ${items.length}\n`);
+      if (items[0]) {
+        console.log(`  available fields: ${Object.keys(items[0]).join(', ')}`);
+        console.table([items[0]]);
+      }
+    } else {
+      console.log(` d.${q.key}  (${q.label})   d.${q.key}Total = ${data[`${q.key}Total`]}\n`);
+      const rows = Object.entries(results || {}).map(([ws, items]) => {
+        const row = { workstream: ws, count: Array.isArray(items) ? items.length : '—' };
+        const sample = Array.isArray(items) ? items[0] : items;
+        if (sample) row['available fields'] = Object.keys(sample).join(', ');
+        return row;
+      });
+      console.table(rows);
+
+      const firstWs    = Object.values(results || {}).find(arr => Array.isArray(arr) && arr.length > 0);
+      const sampleItem = firstWs?.[0];
+      if (sampleItem) {
+        console.log(`  sample item → d.${q.key}.<workstream>[0]:`);
+        console.table([sampleItem]);
+      }
     }
   }
 
+  // GroupBy result tables
   for (const q of QUERIES) {
-    if (!q.consolidate) continue;
-    const key = q.consolidateKey || q.key + 'Summary';
-    const val = data[key];
-    if (!val) continue;
-    const hasNested = Object.values(val).some(v => v !== null && typeof v === 'object' && !Array.isArray(v));
-    if (hasNested) {
-      for (const [subKey, subVal] of Object.entries(val)) {
-        if (subVal !== null && typeof subVal === 'object' && !Array.isArray(subVal)) {
-          console.log(` d.${key}.${subKey}  (${q.label} — by ${subKey})\n`);
-          console.table([subVal]);
-        }
+    for (const field of q.groupByFields || []) {
+      const cap = field.charAt(0).toUpperCase() + field.slice(1);
+      const key = `${q.key}By${cap}`;
+      if (data[key]) {
+        console.log(` d.${key}  (${q.label} — by ${field})\n`);
+        console.table([data[key]]);
       }
-    } else {
-      console.log(` d.${key}  (${q.label} — consolidated)\n`);
-      console.table([val]);
     }
   }
 

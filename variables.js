@@ -3,9 +3,11 @@
 //
 // The data object `d` has this shape:
 //   d.stats.<WorkstreamName>        — { planned, executed, passed, failed, notStarted, inProgress }
-//   d.<queryKey>.<WorkstreamName>   — array of items from that query (e.g. d.bugs.PDM, d.closedBugs.PDM)
+//   d.<queryKey>.<WorkstreamName>   — array of items from that query (e.g. d.bugs.PDM)
+//   d.<queryKey>Total               — total item count across all workstreams (e.g. d.bugsTotal)
 //   d.consolidatedData              — stats summed across all workstreams
-//   d.bugsBySeverityPriority        — { total, severity: { total, sev1–4 }, priority: { pri1–4 } }
+//   d.<queryKey>By<Field>           — group-by counts: { total, 'value1': count, ... }
+//                                     e.g. d.bugsBySeverity['1 - Critical'], d.bugsByPriority[1]
 //
 // WorkstreamName must match the `name` field in the WORKSTREAMS array in config.js.
 
@@ -54,7 +56,7 @@ export const VARIABLE_MAP = {
   IPTC:      d => d.consolidatedData.inProgress,
   PTC:       d => d.consolidatedData.passed,
   FTC:       d => d.consolidatedData.failed,
-  TB:        d => d.bugsBySeverityPriority.total,
+  TB:        d => d.bugsBySeverity.total,
 
   // Calculated percentages — guard against divide-by-zero if nothing has run yet
   PP:        d => d.consolidatedData.executed ? Math.round((d.consolidatedData.passed / d.consolidatedData.executed) * 100) : 0,

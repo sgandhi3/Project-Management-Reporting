@@ -66,9 +66,9 @@ function formatDataForPrompt(data) {
   lines.push(`TOTAL | ${c.planned} | ${c.executed} | ${c.passed} | ${c.failed} | ${c.notStarted} | ${c.inProgress} (${totalPct}% pass rate)`);
   lines.push('');
 
-  // Bug summary (from any query with consolidateKey containing "bug", case-insensitive)
+  // Bug summary — finds any top-level key containing "bug" that's an object (groupBy results)
   const bugKeys = Object.keys(data).filter(k =>
-    k.toLowerCase().includes('bug') && typeof data[k] === 'object' && data[k] !== null
+    k.toLowerCase().includes('bug') && typeof data[k] === 'object' && data[k] !== null && !Array.isArray(data[k])
   );
   if (bugKeys.length) {
     lines.push('BUG SUMMARY');
