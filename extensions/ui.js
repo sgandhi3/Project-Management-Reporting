@@ -330,9 +330,12 @@ app.post('/api/query/test', (req, res) => {
   const envVars    = readEnvFile();
   const uiCfg      = fs.existsSync(UI_CONFIG_PATH) ? JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8')) : {};
   const workstreams = uiCfg.workstreams || [];
-  const ws          = (workstreamName ? workstreams.find(w => w.name === workstreamName) : null)
-                    || workstreams[0]
-                    || {};
+  // For global scope: no workstream context — template vars resolve from env only
+  const ws = scope === 'global'
+    ? {}
+    : (workstreamName ? workstreams.find(w => w.name === workstreamName) : null)
+        || workstreams[0]
+        || {};
   const provider    = (envVars.TEST_PROVIDER || process.env.TEST_PROVIDER || 'ado').toLowerCase();
 
   // Build a self-contained ES module script and pipe it via stdin
@@ -352,12 +355,13 @@ if (provider === 'ado') {
 const target = scope === 'global' ? { name: 'global', areaPath: '' } : ws;
 try {
   const results = await runQuery(target, config);
-  process.stdout.write(JSON.stringify({
-    workstream: ws.name || '(none)',
+  const out = {
     count:  results.length,
     fields: results[0] ? Object.keys(results[0]) : [],
     sample: results.slice(0, 3),
-  }));
+  };
+  if (scope !== 'global') out.workstream = ws.name || '(none)';
+  process.stdout.write(JSON.stringify(out));
 } catch (e) {
   process.stdout.write(JSON.stringify({ error: e.message.split('\\n')[0] }));
 }
