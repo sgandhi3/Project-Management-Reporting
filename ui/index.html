@@ -1576,10 +1576,19 @@ async function autoGenerateMappings() {
     function qAb(key) {
       return key.replace(/([A-Z])/g, ' $1').trim().split(/\s+/).map(w => w[0].toUpperCase()).join('');
     }
-    // Suite path → last segment, stripped: 'Iter 2 / CPIMs / Phase 1' → 'PH1'
+    // Suite path → abbreviation of ALL segments so each depth is unique.
+    // Each segment: first 2 alpha chars of each word + trailing digits.
+    // 'Iteration 2'             → 'IT2'
+    // 'Iteration 2 / Iter 2.1' → 'IT2IT21'
+    // 'Iteration 2 / Iter 2.1 / CPIMs' → 'IT2IT21CP'  (capped at 10 chars)
     function suiteAb(path) {
-      const last = path.split(' / ').pop();
-      return last.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 5);
+      return path.split(' / ').map(seg =>
+        seg.trim().split(/\s+/).map(w => {
+          const alpha = w.replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase();
+          const nums  = w.replace(/[^0-9]/g, '');
+          return alpha + nums;
+        }).join('')
+      ).join('').slice(0, 10);
     }
     // GroupBy value → short label: '1 - Critical'→'CRIT', '2 - High'→'HIGH', 'In Progress'→'INPG'
     function valAb(v) {
