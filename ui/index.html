@@ -1499,68 +1499,95 @@ async function autoGenerateMappings() {
     const queries = (config.queries    || []).filter(q => q.enabled !== false);
     const generated = [];
 
-    const STAT_DEFS = [
-      { key: 'planned',    label: 'Total Test Cases'  },
-      { key: 'executed',   label: 'Executed'           },
-      { key: 'passed',     label: 'Passed'             },
-      { key: 'failed',     label: 'Failed'             },
-      { key: 'notStarted', label: 'Not Started'        },
-      { key: 'inProgress', label: 'In Progress'        },
-    ];
-
-    // Abbreviate workstream name for token (PDM→PDM, Benefits→B, Enrollment→E, EDI→EDI)
-    function abbrev(name) {
-      return name.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 6);
+    // ── Token helpers ─────────────────────────────────────────────────────────
+    // Workstream → short prefix: PDM→PDM, Benefits→BEN, Enrollment→ENR, EDI→EDI
+    function wsAb(name) {
+      const words = name.trim().split(/\s+/);
+      if (words.length > 1) return words.map(w => w[0]).join('').toUpperCase().slice(0, 5);
+      return name.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 4);
     }
+    // Query key → initials of camelCase words: bugs→B, closedBugs→CB, allBugs→AB
+    function qAb(key) {
+      return key.replace(/([A-Z])/g, ' $1').trim().split(/\s+/).map(w => w[0].toUpperCase()).join('');
+    }
+    // Suite path → last segment, stripped: 'Iter 2 / CPIMs / Phase 1' → 'PH1'
+    function suiteAb(path) {
+      const last = path.split(' / ').pop();
+      return last.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 5);
+    }
+    // GroupBy value → short label: '1 - Critical'→'CRIT', '2 - High'→'HIGH', 'In Progress'→'INPG'
+    function valAb(v) {
+      const s = String(v).replace(/^\d+\s*-\s*/, ''); // strip leading "1 - "
+      return s.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 4);
+    }
+
+    const STAT_SFX = { planned:'TTC', executed:'ETC', passed:'PTC', failed:'FTC', notStarted:'NSTC', inProgress:'IPTC' };
+    const STAT_DEFS = [
+      { key: 'planned',    label: 'Total Test Cases' },
+      { key: 'executed',   label: 'Executed'          },
+      { key: 'passed',     label: 'Passed'            },
+      { key: 'failed',     label: 'Failed'            },
+      { key: 'notStarted', label: 'Not Started'       },
+      { key: 'inProgress', label: 'In Progress'       },
+    ];
 
     // ── Per-workstream stats ──────────────────────────────────────────────────
     for (const w of ws) {
-      const ab = abbrev(w.name);
-      for (const { key, label } of STAT_DEFS) {
-        const suffixes = { planned:'TTC', executed:'ETC', passed:'PTC', failed:'FTC', notStarted:'NSTC', inProgress:'IPTC' };
-        generated.push({ token: `${ab}${suffixes[key]}`, path: `d.stats.${w.name}.${key}`, description: `${w.name} — ${label}` });
-      }
+      const ab = wsAb(w.name);
+      for (const { key, label } of STAT_DEFS)
+        generated.push({ token: `${ab}${STAT_SFX[key]}`, path: `d.stats.${w.name}.${key}`, description: `${w.name} — ${label}` });
     }
 
-    // ── Consolidated (all workstreams) ────────────────────────────────────────
-    for (const { key, label } of STAT_DEFS) {
-      const suffixes = { planned:'TTC', executed:'ETC', passed:'PTC', failed:'FTC', notStarted:'NSTC', inProgress:'IPTC' };
-      generated.push({ token: suffixes[key], path: `d.consolidatedData.${key}`, description: `Overall — ${label}` });
-    }
+    // ── Consolidated ──────────────────────────────────────────────────────────
+    for (const { key, label } of STAT_DEFS)
+      generated.push({ token: STAT_SFX[key], path: `d.consolidatedData.${key}`, description: `Overall — ${label}` });
     generated.push({ token: 'PP', path: `d.consolidatedData.executed ? Math.round((d.consolidatedData.passed / d.consolidatedData.executed) * 100) : 0`, description: 'Overall — Pass %' });
     generated.push({ token: 'FP', path: `d.consolidatedData.executed ? Math.round((d.consolidatedData.failed  / d.consolidatedData.executed) * 100) : 0`, description: 'Overall — Fail %' });
 
+    // ── Sub-suite stats (from last preview data if available) ─────────────────
+    if (_lastPreviewData?.subStats) {
+      for (const [wsName, suites] of Object.entries(_lastPreviewData.subStats)) {
+        const wab = wsAb(wsName);
+        for (const [suitePath, s] of Object.entries(suites)) {
+          if (!s || typeof s !== 'object') continue;
+          const sab = suiteAb(suitePath);
+          const pathExpr = `d.subStats.${wsName}['${suitePath}']`;
+          for (const { key, label } of STAT_DEFS)
+            generated.push({ token: `${wab}${sab}${STAT_SFX[key]}`, path: `${pathExpr}.${key}`, description: `${wsName} / ${suitePath} — ${label}` });
+        }
+      }
+    }
+
     // ── Per-workstream query counts ───────────────────────────────────────────
     for (const q of queries.filter(q => q.scope !== 'global')) {
-      const ab = q.key.replace(/[^A-Z0-9]/gi,'').toUpperCase().slice(0,8);
-      generated.push({ token: `${ab}TOTAL`, path: `d.${q.key}Total`, description: `${q.label} — total across all workstreams` });
+      const ab = qAb(q.key);
+      generated.push({ token: `${ab}T`, path: `d.${q.key}Total`, description: `${q.label} — total (all workstreams)` });
       for (const w of ws) {
-        const wab = abbrev(w.name);
+        const wab = wsAb(w.name);
         generated.push({ token: `${wab}${ab}`, path: `d.${q.key}.${w.name}.length`, description: `${w.name} — ${q.label} count` });
       }
     }
 
     // ── Global query counts ───────────────────────────────────────────────────
-    for (const q of queries.filter(q => q.scope === 'global')) {
-      const ab = q.key.replace(/[^A-Z0-9]/gi,'').toUpperCase().slice(0,8);
-      generated.push({ token: `${ab}COUNT`, path: `d.${q.key}.length`, description: `${q.label} — global count` });
-    }
+    for (const q of queries.filter(q => q.scope === 'global'))
+      generated.push({ token: `${qAb(q.key)}N`, path: `d.${q.key}.length`, description: `${q.label} — global count` });
 
-    // ── GroupBy fields ────────────────────────────────────────────────────────
+    // ── GroupBy ───────────────────────────────────────────────────────────────
     const KNOWN_VALUES = {
       severity: ['1 - Critical','2 - High','3 - Medium','4 - Low'],
       priority: [1, 2, 3, 4],
       state:    ['Active','New','Resolved','Closed','Blocked','In Progress'],
     };
     for (const q of queries) {
+      const qab = qAb(q.key);
       for (const field of q.groupByFields || []) {
         const cap   = field.charAt(0).toUpperCase() + field.slice(1);
         const byKey = `${q.key}By${cap}`;
-        const ab    = byKey.replace(/[^A-Z0-9]/gi,'').toUpperCase().slice(0,10);
-        generated.push({ token: `${ab}TOTAL`, path: `d.${byKey}.total`, description: `${q.label} — by ${field} total` });
-        for (const v of KNOWN_VALUES[field.toLowerCase()] || []) {
-          const vab = String(v).replace(/[^A-Z0-9]/gi,'').toUpperCase().slice(0,6);
-          generated.push({ token: `${ab}${vab}`, path: typeof v === 'string' ? `d.${byKey}['${v}']` : `d.${byKey}[${v}]`, description: `${q.label} — by ${field}: ${v}` });
+        const fab   = field.slice(0,3).toUpperCase(); // sev, pri, sta
+        generated.push({ token: `${qab}${fab}T`, path: `d.${byKey}.total`, description: `${q.label} by ${field} — total` });
+        for (const v of (KNOWN_VALUES[field.toLowerCase()] || [])) {
+          const vab = typeof v === 'number' ? `P${v}` : valAb(v);
+          generated.push({ token: `${qab}${fab}${vab}`, path: typeof v === 'string' ? `d.${byKey}['${v}']` : `d.${byKey}[${v}]`, description: `${q.label} by ${field}: ${v}` });
         }
       }
     }
@@ -1568,12 +1595,13 @@ async function autoGenerateMappings() {
     // ── Utilities ─────────────────────────────────────────────────────────────
     generated.push({ token: 'Date', path: `new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric' })`, description: 'Report date (MM/DD/YYYY, ET)' });
 
-    // Merge: keep existing user mappings, append generated ones that don't have a matching token
+    // Merge — skip tokens that already exist
     const existingTokens = new Set(variablesData.map(v => v.token));
-    const toAdd = generated.filter(g => !existingTokens.has(g.token));
+    const toAdd = generated.filter(g => g.token && !existingTokens.has(g.token));
     variablesData = [...variablesData, ...toAdd];
     renderVariables();
-    toast(`Added ${toAdd.length} mapping${toAdd.length !== 1 ? 's' : ''} (${generated.length - toAdd.length} already existed)`);
+    const subNote = _lastPreviewData?.subStats ? '' : ' (run Data Preview first to include sub-suite mappings)';
+    toast(`Added ${toAdd.length} mapping${toAdd.length !== 1 ? 's' : ''}${subNote}`);
   } catch (e) {
     toast('Auto-generate failed: ' + e.message, 'error');
   }
