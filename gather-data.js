@@ -34,7 +34,7 @@ function groupBy(items, field) {
 async function collectAllData(provider) {
   console.log(`\nFetching data via ${PROVIDER} provider...\n`);
 
-  const data = { stats: {} };
+  const data = { stats: {}, subStats: {} };
   for (const q of QUERIES) {
     data[q.key] = q.scope === 'global' ? [] : {};
   }
@@ -73,6 +73,18 @@ async function collectAllData(provider) {
     } catch (e) {
       console.log(`failed — ${e.message.split('\n')[0]}`);
       data.stats[ws.name] = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+    }
+
+    if (provider.fetchSubSuiteStats) {
+      process.stdout.write(`  Sub-suite breakdown... `);
+      try {
+        data.subStats[ws.name] = await provider.fetchSubSuiteStats(ws);
+        const count = Object.keys(data.subStats[ws.name]).length;
+        console.log(count ? Object.keys(data.subStats[ws.name]).join(', ') : 'no sub-suites');
+      } catch (e) {
+        console.log(`failed — ${e.message.split('\n')[0]}`);
+        data.subStats[ws.name] = {};
+      }
     }
 
     for (const q of wsQueries) {
@@ -147,6 +159,16 @@ function printDataSnapshot(data) {
   const c = data.consolidatedData;
   console.log(' d.consolidatedData  (all workstreams combined)');
   console.table([{ planned: c.planned, executed: c.executed, passed: c.passed, failed: c.failed, notStarted: c.notStarted, inProgress: c.inProgress }]);
+
+  const subStatEntries = Object.entries(data.subStats).filter(([, v]) => Object.keys(v).length > 0);
+  if (subStatEntries.length) {
+    console.log(' d.subStats  (per-workstream sub-suite breakdown)\n');
+    for (const [wsName, suites] of subStatEntries) {
+      console.log(`  ${wsName}:`);
+      const rows = Object.entries(suites).map(([suite, s]) => ({ suite, planned: s.planned, executed: s.executed, passed: s.passed, failed: s.failed }));
+      console.table(rows);
+    }
+  }
 
   for (const q of QUERIES) {
     const results = data[q.key];

@@ -93,6 +93,38 @@ export async function fetchTestStats({ name, planId, sitSuiteId }) {
   return totals;
 }
 
+// Returns stats broken down by direct children of sitSuiteId.
+// Each child's total rolls up all of its own descendants.
+// Returns {} if the suite has no children (flat workstreams unaffected).
+export async function fetchSubSuiteStats({ name, planId, sitSuiteId }) {
+  if (!planId || !sitSuiteId) return {};
+  const allSuites  = await fetchPlanSuites(planId);
+  const index      = Object.fromEntries(allSuites.map(s => [s.id, s]));
+  const rootId     = Number(sitSuiteId);
+  const root       = index[rootId];
+  if (!root) return {};
+
+  // Direct children of the root suite
+  let children = (root.children || []).map(c => index[c.id ?? c]).filter(Boolean);
+  // Fallback: scan parentSuite references when $expand=children didn't populate
+  if (!children.length) {
+    children = allSuites.filter(s => s.parentSuite?.id === rootId || s.parent?.id === rootId);
+  }
+  if (!children.length) return {};
+
+  const result = {};
+  for (const child of children) {
+    const descendantIds = collectSuiteDescendants(child.id, allSuites);
+    const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+    for (const sid of descendantIds) {
+      const t = tallyOutcomes(await fetchSuiteTestPoints(planId, sid));
+      for (const k of Object.keys(totals)) totals[k] += t[k];
+    }
+    result[child.name] = totals;
+  }
+  return result;
+}
+
 // ─── Generic WIQL query runner ────────────────────────────────────────────────
 
 // config can be one of three shapes:
