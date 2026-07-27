@@ -818,6 +818,7 @@
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" onclick="autoGenerateMappings()" title="Generate mappings for all workstreams, stats, queries, and groupBy fields from the current config">Auto-generate</button>
         <button class="btn btn-secondary" onclick="addVariable()">Add Variable</button>
+        <button class="btn btn-secondary" onclick="clearVariables()" title="Remove all mappings except PP, FP, and Date">Clear</button>
         <button class="btn btn-primary"   onclick="saveVariables()">Save Mappings</button>
       </div>
     </div>
@@ -1478,6 +1479,17 @@ function getDuplicateTokens() {
   return dupes;
 }
 
+function getDuplicatePaths() {
+  const seen = {}, dupes = new Set();
+  for (const v of variablesData) {
+    const p = (v.path || '').trim();
+    if (!p) continue;
+    if (seen[p]) dupes.add(p);
+    seen[p] = true;
+  }
+  return dupes;
+}
+
 function renderVariables() {
   const tbody  = document.getElementById('var-tbody');
   const search = document.getElementById('var-search');
@@ -1487,21 +1499,25 @@ function renderVariables() {
     updateVarCount(0, 0);
     return;
   }
-  const dupes = getDuplicateTokens();
+  const dupeTok  = getDuplicateTokens();
+  const dupePath = getDuplicatePaths();
   variablesData.forEach((v, idx) => {
-    const isDupe = dupes.has((v.token || '').trim());
+    const isTokDupe  = dupeTok.has((v.token || '').trim());
+    const isPathDupe = dupePath.has((v.path  || '').trim());
     const tr = document.createElement('tr');
     tr.dataset.token = (v.token || '').toLowerCase();
     tr.dataset.path  = (v.path  || '').toLowerCase();
     tr.dataset.desc  = (v.description || '').toLowerCase();
+    const dupeStyle  = 'border-color:#e53e3e;background:rgba(229,62,62,.07);';
     tr.innerHTML =
       `<td><input type="text" value="${esc(v.token || '')}" placeholder="TOKEN"
-        style="${isDupe ? 'border-color:#e53e3e;background:rgba(229,62,62,.07);' : ''}"
-        title="${isDupe ? 'Duplicate token — each token must be unique' : ''}"
+        style="${isTokDupe ? dupeStyle : ''}"
+        title="${isTokDupe ? 'Duplicate token — each token must be unique' : ''}"
         oninput="variablesData[${idx}].token=this.value;this.closest('tr').dataset.token=this.value.toLowerCase();highlightDuplicates()"></td>` +
       `<td><input type="text" value="${esc(v.path  || '')}" placeholder="d.stats.PDM.planned"
-        style="font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;"
-        oninput="variablesData[${idx}].path=this.value;this.closest('tr').dataset.path=this.value.toLowerCase()"></td>` +
+        style="font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;${isPathDupe ? dupeStyle : ''}"
+        title="${isPathDupe ? 'Duplicate path — this expression is already mapped to another token' : ''}"
+        oninput="variablesData[${idx}].path=this.value;this.closest('tr').dataset.path=this.value.toLowerCase();highlightDuplicates()"></td>` +
       `<td><input type="text" value="${esc(v.description || '')}" placeholder="e.g. PDM total test cases"
         style="font-size:12px;color:var(--text-muted);"
         oninput="variablesData[${idx}].description=this.value;this.closest('tr').dataset.desc=this.value.toLowerCase()"></td>` +
@@ -1513,14 +1529,23 @@ function renderVariables() {
 }
 
 function highlightDuplicates() {
-  const dupes = getDuplicateTokens();
-  document.querySelectorAll('#var-tbody tr').forEach(tr => {
-    const inp = tr.querySelector('td:first-child input');
-    if (!inp) return;
-    const isDupe = dupes.has(inp.value.trim());
-    inp.style.borderColor = isDupe ? '#e53e3e' : '';
-    inp.style.background  = isDupe ? 'rgba(229,62,62,.07)' : '';
-    inp.title = isDupe ? 'Duplicate token — each token must be unique' : '';
+  const dupeTok  = getDuplicateTokens();
+  const dupePath = getDuplicatePaths();
+  document.querySelectorAll('#var-tbody tr[data-token]').forEach(tr => {
+    const tokInp  = tr.querySelector('td:nth-child(1) input');
+    const pathInp = tr.querySelector('td:nth-child(2) input');
+    if (tokInp) {
+      const d = dupeTok.has(tokInp.value.trim());
+      tokInp.style.borderColor = d ? '#e53e3e' : '';
+      tokInp.style.background  = d ? 'rgba(229,62,62,.07)' : '';
+      tokInp.title = d ? 'Duplicate token — each token must be unique' : '';
+    }
+    if (pathInp) {
+      const d = dupePath.has(pathInp.value.trim());
+      pathInp.style.borderColor = d ? '#e53e3e' : '';
+      pathInp.style.background  = d ? 'rgba(229,62,62,.07)' : '';
+      pathInp.title = d ? 'Duplicate path — this expression is already mapped to another token' : '';
+    }
   });
 }
 
@@ -1543,6 +1568,13 @@ function updateVarCount(visible, total) {
   const el = document.getElementById('var-count');
   if (!el) return;
   el.textContent = total === 0 ? '' : visible === total ? `${total} mappings` : `${visible} / ${total}`;
+}
+
+function clearVariables() {
+  const KEEP = new Set(['PP', 'FP', 'Date']);
+  variablesData = variablesData.filter(v => KEEP.has(v.token));
+  renderVariables();
+  toast(`Cleared — kept PP, FP, Date`);
 }
 
 function addVariable() {
@@ -1681,9 +1713,10 @@ async function autoGenerateMappings() {
         seenGen[g.token] = 0;
       }
     }
-    // Merge — skip tokens that already exist in the current list
+    // Merge — skip if token OR path already exists in the current list
     const existingTokens = new Set(variablesData.map(v => v.token));
-    const toAdd = generated.filter(g => g.token && !existingTokens.has(g.token));
+    const existingPaths  = new Set(variablesData.map(v => (v.path || '').trim()).filter(Boolean));
+    const toAdd = generated.filter(g => g.token && !existingTokens.has(g.token) && !existingPaths.has((g.path || '').trim()));
     variablesData = [...variablesData, ...toAdd];
     renderVariables();
     const subNote = _lastPreviewData?.subStats ? '' : ' (run Data Preview first to include sub-suite mappings)';
@@ -1694,9 +1727,14 @@ async function autoGenerateMappings() {
 }
 
 async function saveVariables() {
-  const dupes = getDuplicateTokens();
-  if (dupes.size > 0) {
-    toast(`Duplicate tokens: ${[...dupes].join(', ')} — each token must be unique`, 'error');
+  const dupeTok  = getDuplicateTokens();
+  const dupePath = getDuplicatePaths();
+  if (dupeTok.size > 0) {
+    toast(`Duplicate tokens: ${[...dupeTok].join(', ')} — each token must be unique`, 'error');
+    return;
+  }
+  if (dupePath.size > 0) {
+    toast(`Duplicate paths detected — remove the duplicates before saving`, 'error');
     return;
   }
   try {

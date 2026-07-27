@@ -9,7 +9,7 @@
     {
       "name": "PDM",
       "planId": "20140",
-      "sitSuiteId": "23776",
+      "sitSuiteId": "24811",
       "areaPath": "HRP\\Testing\\Provider\\PDM",
       "projectKey": "",
       "testCycleKey": ""
@@ -41,156 +41,19 @@
   ],
   "variableMappings": [
     {
-      "token": "PDMTTC",
-      "path": "d.stats.PDM.planned"
-    },
-    {
-      "token": "PDMETC",
-      "path": "d.stats.PDM.executed"
-    },
-    {
-      "token": "PDMNSTC",
-      "path": "d.stats.PDM.notStarted"
-    },
-    {
-      "token": "PDMIPTC",
-      "path": "d.stats.PDM.inProgress"
-    },
-    {
-      "token": "PDMPTC",
-      "path": "d.stats.PDM.passed"
-    },
-    {
-      "token": "PDMFTC",
-      "path": "d.stats.PDM.failed"
-    },
-    {
-      "token": "PDMTB",
-      "path": "d.bugs.PDM.length"
-    },
-    {
-      "token": "BTTC",
-      "path": "d.stats.Benefits.planned"
-    },
-    {
-      "token": "BETC",
-      "path": "d.stats.Benefits.executed"
-    },
-    {
-      "token": "BNSTC",
-      "path": "d.stats.Benefits.notStarted"
-    },
-    {
-      "token": "BIPTC",
-      "path": "d.stats.Benefits.inProgress"
-    },
-    {
-      "token": "BPTC",
-      "path": "d.stats.Benefits.passed"
-    },
-    {
-      "token": "BFTC",
-      "path": "d.stats.Benefits.failed"
-    },
-    {
-      "token": "BTB",
-      "path": "d.bugs.Benefits.length"
-    },
-    {
-      "token": "ETTC",
-      "path": "d.stats.Enrollment.planned"
-    },
-    {
-      "token": "EETC",
-      "path": "d.stats.Enrollment.executed"
-    },
-    {
-      "token": "ENSTC",
-      "path": "d.stats.Enrollment.notStarted"
-    },
-    {
-      "token": "EIPTC",
-      "path": "d.stats.Enrollment.inProgress"
-    },
-    {
-      "token": "EPTC",
-      "path": "d.stats.Enrollment.passed"
-    },
-    {
-      "token": "EFTC",
-      "path": "d.stats.Enrollment.failed"
-    },
-    {
-      "token": "ETB",
-      "path": "d.bugs.Enrollment.length"
-    },
-    {
-      "token": "EDITTC",
-      "path": "d.stats.EDI.planned"
-    },
-    {
-      "token": "EDIETC",
-      "path": "d.stats.EDI.executed"
-    },
-    {
-      "token": "EDINSTC",
-      "path": "d.stats.EDI.notStarted"
-    },
-    {
-      "token": "EDIIPTC",
-      "path": "d.stats.EDI.inProgress"
-    },
-    {
-      "token": "EDIPTC",
-      "path": "d.stats.EDI.passed"
-    },
-    {
-      "token": "EDIFTC",
-      "path": "d.stats.EDI.failed"
-    },
-    {
-      "token": "EDITB",
-      "path": "d.bugs.EDI.length"
-    },
-    {
-      "token": "TTC",
-      "path": "d.consolidatedData.planned"
-    },
-    {
-      "token": "ETC",
-      "path": "d.consolidatedData.executed"
-    },
-    {
-      "token": "NSTC",
-      "path": "d.consolidatedData.notStarted"
-    },
-    {
-      "token": "IPTC",
-      "path": "d.consolidatedData.inProgress"
-    },
-    {
-      "token": "PTC",
-      "path": "d.consolidatedData.passed"
-    },
-    {
-      "token": "FTC",
-      "path": "d.consolidatedData.failed"
-    },
-    {
-      "token": "TB",
-      "path": "d.bugsBySeverity.total"
-    },
-    {
       "token": "PP",
-      "path": "d.consolidatedData.executed ? Math.round((d.consolidatedData.passed / d.consolidatedData.executed) * 100) : 0"
+      "path": "d.consolidatedData.executed ? Math.round((d.consolidatedData.passed / d.consolidatedData.executed) * 100) : 0",
+      "description": "Overall — Pass %"
     },
     {
       "token": "FP",
-      "path": "d.consolidatedData.executed ? Math.round((d.consolidatedData.failed / d.consolidatedData.executed) * 100) : 0"
+      "path": "d.consolidatedData.executed ? Math.round((d.consolidatedData.failed / d.consolidatedData.executed) * 100) : 0",
+      "description": "Overall — Fail %"
     },
     {
       "token": "Date",
-      "path": "new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric' })"
+      "path": "new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric' })",
+      "description": "Report date (MM/DD/YYYY, ET)"
     }
   ],
   "queries": [
