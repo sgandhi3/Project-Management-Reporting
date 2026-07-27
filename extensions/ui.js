@@ -321,6 +321,37 @@ app.get('/api/data-paths', (_req, res) => {
   }
 });
 
+// ─── Data preview API ─────────────────────────────────────────────────────────
+// Spawns gather-data.js --preview and returns the collected data as JSON.
+// No extensions run — purely data collection for the UI Data tab.
+
+app.get('/api/data/preview', (req, res) => {
+  const envVars = readEnvFile();
+  const child   = spawn('node', [path.join(projectRoot, 'gather-data.js'), '--preview'], {
+    cwd: projectRoot,
+    env: { ...process.env, ...envVars },
+  });
+
+  let out = '', err = '';
+  child.stdout.on('data', d => out += d);
+  child.stderr.on('data', d => err += d);
+
+  child.on('close', () => {
+    const marker = '__PREVIEW__';
+    const idx    = out.indexOf(marker);
+    if (idx === -1) {
+      const firstErr = err.split('\n').find(l => l.trim()) || out || 'No output';
+      return res.status(500).json({ error: firstErr });
+    }
+    try {
+      res.json(JSON.parse(out.slice(idx + marker.length)));
+    } catch {
+      res.status(500).json({ error: 'Failed to parse preview data' });
+    }
+  });
+  child.on('error', e => res.status(500).json({ error: e.message }));
+});
+
 // ─── Query test API ───────────────────────────────────────────────────────────
 // Runs a single query in a fresh child process and returns field names + sample rows.
 // Body: { wiqlTemplate, jiraTemplate, scope, workstreamName? }

@@ -216,9 +216,21 @@ function printDataSnapshot(data) {
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
+const args = process.argv.slice(2);
+
 async function main() {
   const provider  = await import(`./providers/${PROVIDER}.js`);
   const data      = await collectAllData(provider);
+
+  // --preview: output data as JSON for the UI Data tab, skip extensions
+  if (args.includes('--preview')) {
+    process.stdout.write('__PREVIEW__' + JSON.stringify(data, (_k, v) =>
+      // Drop raw item arrays to keep payload small — keep counts/groupBy/stats
+      Array.isArray(v) && v.length > 0 && typeof v[0] === 'object' && !Array.isArray(v[0]) ? `[${v.length} items]` : v
+    ) + '\n');
+    return;
+  }
+
   printDataSnapshot(data);
 
   for (const output of OUTPUTS) {
