@@ -866,10 +866,19 @@
         <button class="btn btn-primary" id="data-fetch-btn" onclick="fetchDataPreview()">Fetch Data</button>
       </div>
     </div>
-    <p style="color:var(--text-muted);font-size:13px;margin-bottom:18px;">
+    <p style="color:var(--text-muted);font-size:13px;margin-bottom:14px;">
       Runs data collection only — no report is generated. Use this to verify your queries and check what values are available for variable mapping.
     </p>
+    <div id="data-view-toggle" style="display:none;margin-bottom:16px;">
+      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;">
+        <button id="dvtab-visual" onclick="setDataView('visual')"
+          style="padding:6px 18px;font-size:13px;border:none;cursor:pointer;background:var(--accent);color:#fff;">Visual</button>
+        <button id="dvtab-raw" onclick="setDataView('raw')"
+          style="padding:6px 18px;font-size:13px;border:none;cursor:pointer;background:transparent;color:inherit;border-left:1px solid var(--border);">Raw d.*</button>
+      </div>
+    </div>
     <div id="data-preview-content"></div>
+    <div id="data-raw-content" style="display:none;"></div>
   </div>
 
   <!-- ── Tab: Run ───────────────────────────────────────────────────────────── -->
@@ -1563,21 +1572,41 @@ function fallbackCopy(text) {
 
 // ── Data Preview tab ──────────────────────────────────────────────────────────
 
+let _lastPreviewData = null;
+let _dataView = 'visual';
+
+function setDataView(view) {
+  _dataView = view;
+  document.getElementById('dvtab-visual').style.background = view === 'visual' ? 'var(--accent)' : 'transparent';
+  document.getElementById('dvtab-visual').style.color      = view === 'visual' ? '#fff' : 'inherit';
+  document.getElementById('dvtab-raw').style.background    = view === 'raw'    ? 'var(--accent)' : 'transparent';
+  document.getElementById('dvtab-raw').style.color         = view === 'raw'    ? '#fff' : 'inherit';
+  document.getElementById('data-preview-content').style.display = view === 'visual' ? 'block' : 'none';
+  document.getElementById('data-raw-content').style.display     = view === 'raw'    ? 'block' : 'none';
+}
+
 async function fetchDataPreview() {
   const btn    = document.getElementById('data-fetch-btn');
   const status = document.getElementById('data-status');
   const out    = document.getElementById('data-preview-content');
+  const raw    = document.getElementById('data-raw-content');
   btn.disabled = true;
   btn.textContent = 'Fetching…';
   status.textContent = '';
   out.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px 0;">Running data collection — this may take a minute…</div>';
+  raw.innerHTML = '';
   try {
     const data = await api('GET', '/api/data/preview');
+    _lastPreviewData = data;
     const elapsed = new Date().toLocaleTimeString();
     status.textContent = `Last fetched ${elapsed}`;
     out.innerHTML = renderDataPreview(data);
+    raw.innerHTML = renderRawData(data);
+    document.getElementById('data-view-toggle').style.display = 'block';
+    setDataView(_dataView);
   } catch (e) {
     out.innerHTML = `<div class="card" style="border-color:var(--danger,#e53e3e);color:var(--danger,#e53e3e);font-size:13px;">Error: ${esc(e.message)}</div>`;
+    document.getElementById('data-view-toggle').style.display = 'none';
   } finally {
     btn.disabled = false;
     btn.textContent = 'Refresh';
@@ -1715,6 +1744,86 @@ function renderDataPreview(data) {
   }
 
   return html || '<div style="color:var(--text-muted);font-size:13px;">No data returned.</div>';
+}
+
+// Flatten data object into { 'd.path': value } pairs
+function flattenData(obj, prefix) {
+  const SKIP = new Set(['_generatedFiles']);
+  const rows = [];
+  function walk(node, path) {
+    if (SKIP.has(path.split('.').pop())) return;
+    if (node === null || node === undefined) {
+      rows.push({ path, value: String(node) });
+    } else if (typeof node !== 'object') {
+      rows.push({ path, value: String(node) });
+    } else if (Array.isArray(node)) {
+      rows.push({ path, value: `[${node.length} items]` });
+    } else {
+      for (const [k, v] of Object.entries(node)) {
+        // Keys with spaces or special chars → bracket notation
+        const segment = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? `.${k}` : `['${k}']`;
+        walk(v, path + segment);
+      }
+    }
+  }
+  walk(obj, prefix || 'd');
+  return rows;
+}
+
+function renderRawData(data) {
+  const rows = flattenData(data, 'd');
+  const id   = 'raw-search-' + Date.now();
+  let tableRows = rows.map(({ path, value }) => {
+    const isNum  = !isNaN(value) && value !== '';
+    const valHtml = isNum
+      ? `<span style="color:var(--accent);font-weight:600;">${esc(value)}</span>`
+      : `<span style="color:var(--text-muted);">${esc(value)}</span>`;
+    return `<tr data-path="${esc(path)}" data-val="${esc(value)}">
+      <td style="padding:6px 12px;font-family:monospace;font-size:12px;white-space:nowrap;">
+        <span style="color:var(--text-muted);">d</span>${esc(path.slice(1))}
+      </td>
+      <td style="padding:6px 12px;font-size:12px;">${valHtml}</td>
+      <td style="padding:6px 8px;">
+        <button onclick="navigator.clipboard.writeText('${path.replace(/'/g, "\\'")}')" title="Copy path"
+          style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;padding:2px 6px;border-radius:4px;"
+          onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='none'">copy</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<div class="card" style="padding:0;overflow:hidden;">
+    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
+      <input id="${id}" type="text" placeholder="Filter paths…" oninput="filterRawTable(this)"
+        style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;">
+      <span id="${id}-count" style="font-size:12px;color:var(--text-muted);">${rows.length} paths</span>
+    </div>
+    <div style="overflow:auto;max-height:70vh;">
+      <table id="raw-table" style="width:100%;border-collapse:collapse;">
+        <thead style="position:sticky;top:0;background:var(--surface);z-index:1;">
+          <tr style="border-bottom:2px solid var(--border);">
+            <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:600;">Path</th>
+            <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:600;">Value</th>
+            <th style="width:60px;"></th>
+          </tr>
+        </thead>
+        <tbody id="raw-table-body">${tableRows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function filterRawTable(input) {
+  const q     = input.value.toLowerCase();
+  const tbody = document.getElementById('raw-table-body');
+  if (!tbody) return;
+  let visible = 0;
+  for (const tr of tbody.rows) {
+    const match = !q || tr.dataset.path.toLowerCase().includes(q) || tr.dataset.val.toLowerCase().includes(q);
+    tr.style.display = match ? '' : 'none';
+    if (match) visible++;
+  }
+  const countEl = input.closest('.card').querySelector('[id$="-count"]');
+  if (countEl) countEl.textContent = `${visible} paths`;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
