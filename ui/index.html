@@ -874,7 +874,7 @@
         <button id="dvtab-visual" onclick="setDataView('visual')"
           style="padding:6px 18px;font-size:13px;border:none;cursor:pointer;background:var(--accent);color:#fff;">Visual</button>
         <button id="dvtab-raw" onclick="setDataView('raw')"
-          style="padding:6px 18px;font-size:13px;border:none;cursor:pointer;background:transparent;color:inherit;border-left:1px solid var(--border);">Raw d.*</button>
+          style="padding:6px 18px;font-size:13px;border:none;cursor:pointer;background:transparent;color:inherit;border-left:1px solid var(--border);">Tables</button>
       </div>
     </div>
     <div id="data-preview-content"></div>
@@ -1601,7 +1601,7 @@ async function fetchDataPreview() {
     const elapsed = new Date().toLocaleTimeString();
     status.textContent = `Last fetched ${elapsed}`;
     out.innerHTML = renderDataPreview(data);
-    raw.innerHTML = renderRawData(data);
+    raw.innerHTML = renderStructuredTables(data);
     document.getElementById('data-view-toggle').style.display = 'block';
     setDataView(_dataView);
   } catch (e) {
@@ -1746,84 +1746,181 @@ function renderDataPreview(data) {
   return html || '<div style="color:var(--text-muted);font-size:13px;">No data returned.</div>';
 }
 
-// Flatten data object into { 'd.path': value } pairs
-function flattenData(obj, prefix) {
-  const SKIP = new Set(['_generatedFiles']);
-  const rows = [];
-  function walk(node, path) {
-    if (SKIP.has(path.split('.').pop())) return;
-    if (node === null || node === undefined) {
-      rows.push({ path, value: String(node) });
-    } else if (typeof node !== 'object') {
-      rows.push({ path, value: String(node) });
-    } else if (Array.isArray(node)) {
-      rows.push({ path, value: `[${node.length} items]` });
-    } else {
-      for (const [k, v] of Object.entries(node)) {
-        // Keys with spaces or special chars → bracket notation
-        const segment = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(k) ? `.${k}` : `['${k}']`;
-        walk(v, path + segment);
-      }
-    }
-  }
-  walk(obj, prefix || 'd');
-  return rows;
+// ── Structured table renderer ─────────────────────────────────────────────────
+
+const STATS_KEYS = ['planned','executed','passed','failed','notStarted','inProgress'];
+const TH_STYLE   = 'text-align:left;padding:8px 12px;font-size:12px;font-weight:600;white-space:nowrap;';
+const TD_STYLE   = 'padding:8px 12px;font-size:13px;';
+const SKIP_KEYS  = new Set(['_generatedFiles']);
+
+function isStatRow(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) && 'planned' in v;
+}
+function isWorkstreamStatMap(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) &&
+    Object.values(v).every(x => isStatRow(x));
+}
+function isSubStatMap(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) &&
+    Object.values(v).every(x => x && typeof x === 'object' && !Array.isArray(x) && Object.values(x).every(isStatRow));
+}
+function isGroupBy(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) && typeof v.total === 'number';
+}
+function isWorkstreamCountMap(v) {
+  return v && typeof v === 'object' && !Array.isArray(v) &&
+    Object.values(v).every(x => typeof x === 'string' || typeof x === 'number' || Array.isArray(x));
 }
 
-function renderRawData(data) {
-  const rows = flattenData(data, 'd');
-  const id   = 'raw-search-' + Date.now();
-  let tableRows = rows.map(({ path, value }) => {
-    const isNum  = !isNaN(value) && value !== '';
-    const valHtml = isNum
-      ? `<span style="color:var(--accent);font-weight:600;">${esc(value)}</span>`
-      : `<span style="color:var(--text-muted);">${esc(value)}</span>`;
-    return `<tr data-path="${esc(path)}" data-val="${esc(value)}">
-      <td style="padding:6px 12px;font-family:monospace;font-size:12px;white-space:nowrap;">
-        <span style="color:var(--text-muted);">d</span>${esc(path.slice(1))}
-      </td>
-      <td style="padding:6px 12px;font-size:12px;">${valHtml}</td>
-      <td style="padding:6px 8px;">
-        <button onclick="navigator.clipboard.writeText('${path.replace(/'/g, "\\'")}')" title="Copy path"
-          style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:11px;padding:2px 6px;border-radius:4px;"
-          onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background='none'">copy</button>
-      </td>
-    </tr>`;
-  }).join('');
-
-  return `<div class="card" style="padding:0;overflow:hidden;">
-    <div style="padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;">
-      <input id="${id}" type="text" placeholder="Filter paths…" oninput="filterRawTable(this)"
-        style="flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:13px;">
-      <span id="${id}-count" style="font-size:12px;color:var(--text-muted);">${rows.length} paths</span>
+function tableWrap(title, path, body, cols) {
+  const header = cols.map(c => `<th style="${TH_STYLE}">${esc(c)}</th>`).join('');
+  return `<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px;">
+    <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:baseline;gap:10px;">
+      <span style="font-size:13px;font-weight:600;">${esc(title)}</span>
+      <code style="font-size:11px;color:var(--text-muted);">d.${esc(path)}</code>
     </div>
-    <div style="overflow:auto;max-height:70vh;">
-      <table id="raw-table" style="width:100%;border-collapse:collapse;">
-        <thead style="position:sticky;top:0;background:var(--surface);z-index:1;">
-          <tr style="border-bottom:2px solid var(--border);">
-            <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:600;">Path</th>
-            <th style="text-align:left;padding:8px 12px;font-size:12px;font-weight:600;">Value</th>
-            <th style="width:60px;"></th>
-          </tr>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead style="background:var(--surface-2,var(--surface));">
+          <tr style="border-bottom:2px solid var(--border);">${header}</tr>
         </thead>
-        <tbody id="raw-table-body">${tableRows}</tbody>
+        <tbody>${body}</tbody>
       </table>
     </div>
   </div>`;
 }
 
-function filterRawTable(input) {
-  const q     = input.value.toLowerCase();
-  const tbody = document.getElementById('raw-table-body');
-  if (!tbody) return;
-  let visible = 0;
-  for (const tr of tbody.rows) {
-    const match = !q || tr.dataset.path.toLowerCase().includes(q) || tr.dataset.val.toLowerCase().includes(q);
-    tr.style.display = match ? '' : 'none';
-    if (match) visible++;
+function numCell(n, total, highlight) {
+  const p = total > 0 ? Math.round((n / total) * 100) : 0;
+  const bar = total > 0 ? `<div style="margin-top:3px;height:3px;background:var(--border);border-radius:2px;"><div style="width:${p}%;height:100%;background:${highlight||'var(--accent)'};border-radius:2px;"></div></div>` : '';
+  return `<td style="${TD_STYLE}"><span style="font-weight:600;">${n}</span>${bar}</td>`;
+}
+
+function renderStatsRows(map, rowLabelKey) {
+  const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e' };
+  return Object.entries(map).map(([label, s]) => {
+    const cells = STATS_KEYS.map(k =>
+      k === 'planned'
+        ? `<td style="${TD_STYLE}font-weight:600;">${s[k] ?? 0}</td>`
+        : numCell(s[k] ?? 0, s.planned ?? 0, COLORS[k])
+    ).join('');
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="${TD_STYLE}font-weight:500;">${esc(label)}</td>${cells}
+    </tr>`;
+  }).join('');
+}
+
+function renderGroupByTable(key, val) {
+  const { total, ...buckets } = val;
+  const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
+  const rows = sorted.map(([label, count]) => {
+    const p = total > 0 ? Math.round((count / total) * 100) : 0;
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="${TD_STYLE}">${esc(label)}</td>
+      <td style="${TD_STYLE}font-weight:600;">${count}</td>
+      <td style="${TD_STYLE}color:var(--text-muted);">${p}%</td>
+      <td style="${TD_STYLE}min-width:120px;">
+        <div style="height:8px;background:var(--border);border-radius:4px;">
+          <div style="width:${p}%;height:100%;background:var(--accent);border-radius:4px;"></div>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+  return tableWrap(key, key, rows, ['Value', 'Count', '%', '']);
+}
+
+function renderStructuredTables(data) {
+  let html = '';
+  const statsCols = ['', ...STATS_KEYS];
+
+  for (const [key, val] of Object.entries(data)) {
+    if (SKIP_KEYS.has(key)) continue;
+
+    // Simple scalar (bugsTotal etc.)
+    if (typeof val === 'number') {
+      html += `<div class="card" style="display:flex;align-items:center;gap:16px;padding:14px 18px;margin-bottom:16px;">
+        <code style="font-size:13px;">d.${esc(key)}</code>
+        <span style="font-size:22px;font-weight:700;color:var(--accent);">${val}</span>
+      </div>`;
+      continue;
+    }
+
+    // Skip — will be covered by the query card that owns it
+    if (typeof val === 'string') continue;
+
+    if (isStatRow(val)) {
+      // consolidatedData
+      const row = `<tr style="border-bottom:1px solid var(--border);">
+        <td style="${TD_STYLE}font-weight:500;">All workstreams</td>
+        ${STATS_KEYS.map(k => `<td style="${TD_STYLE}font-weight:600;">${val[k]??0}</td>`).join('')}
+      </tr>`;
+      html += tableWrap(key, key, row, statsCols);
+      continue;
+    }
+
+    if (isSubStatMap(val)) {
+      // subStats: workstream → { 'Suite / Child / Grandchild': statRow, ... }
+      let inner = '';
+      for (const [ws, suites] of Object.entries(val)) {
+        if (!Object.keys(suites).length) continue;
+        inner += `<tr style="background:var(--surface-2,var(--surface));">
+          <td colspan="${statsCols.length}" style="padding:8px 12px;font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--text-muted);">${esc(ws)}</td>
+        </tr>`;
+        for (const [suitePath, s] of Object.entries(suites)) {
+          const depth  = (suitePath.match(/ \/ /g) || []).length;
+          const label  = suitePath.split(' / ').pop();
+          const indent = depth * 20;
+          const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e' };
+          const cells  = STATS_KEYS.map(k =>
+            k === 'planned'
+              ? `<td style="${TD_STYLE}font-weight:600;">${s[k]??0}</td>`
+              : numCell(s[k]??0, s.planned??0, COLORS[k])
+          ).join('');
+          inner += `<tr style="border-bottom:1px solid var(--border);" title="${esc(suitePath)}">
+            <td style="${TD_STYLE}padding-left:${12 + indent}px;">
+              ${depth > 0 ? `<span style="color:var(--border);margin-right:6px;">${'└'.padStart(depth,'│')}</span>` : ''}
+              <span style="font-weight:${depth === 0 ? 600 : 400};">${esc(label)}</span>
+              ${depth > 0 ? `<span style="font-size:11px;color:var(--text-muted);margin-left:6px;">${esc(suitePath)}</span>` : ''}
+            </td>${cells}
+          </tr>`;
+        }
+      }
+      if (inner) html += tableWrap(key, key, inner, statsCols);
+      continue;
+    }
+
+    if (isWorkstreamStatMap(val)) {
+      // stats: workstream → statRow
+      html += tableWrap(key, key, renderStatsRows(val), statsCols);
+      continue;
+    }
+
+    if (isGroupBy(val)) {
+      html += renderGroupByTable(key, val);
+      continue;
+    }
+
+    if (isWorkstreamCountMap(val)) {
+      // per-workstream query results (bugs, closedBugs, etc.)
+      const total = data[`${key}Total`];
+      const rows = Object.entries(val).map(([ws, v]) => {
+        const count = typeof v === 'string' ? v : (Array.isArray(v) ? `${v.length} items` : v);
+        return `<tr style="border-bottom:1px solid var(--border);">
+          <td style="${TD_STYLE}font-weight:500;">${esc(ws)}</td>
+          <td style="${TD_STYLE}font-weight:600;">${esc(String(count))}</td>
+        </tr>`;
+      }).join('');
+      const totalRow = total !== undefined
+        ? `<tr style="border-top:2px solid var(--border);background:var(--surface-2,var(--surface));">
+            <td style="${TD_STYLE}font-weight:700;">Total</td>
+            <td style="${TD_STYLE}font-weight:700;color:var(--accent);">${total}</td>
+          </tr>` : '';
+      html += tableWrap(key, key, rows + totalRow, ['Workstream', 'Count']);
+      continue;
+    }
   }
-  const countEl = input.closest('.card').querySelector('[id$="-count"]');
-  if (countEl) countEl.textContent = `${visible} paths`;
+
+  return html || '<div style="color:var(--text-muted);font-size:13px;">No data returned.</div>';
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

@@ -93,35 +93,51 @@ export async function fetchTestStats({ name, planId, sitSuiteId }) {
   return totals;
 }
 
-// Returns stats broken down by direct children of sitSuiteId.
-// Each child's total rolls up all of its own descendants.
+// Returns stats for every suite in the tree under sitSuiteId (all depths).
+// Keys use breadcrumb paths: direct children use just their name,
+// deeper nodes use "Parent / Child / Grandchild" so all levels are accessible.
+// Each entry rolls up all of that suite's own descendants.
 // Returns {} if the suite has no children (flat workstreams unaffected).
 export async function fetchSubSuiteStats({ name, planId, sitSuiteId }) {
   if (!planId || !sitSuiteId) return {};
-  const allSuites  = await fetchPlanSuites(planId);
-  const index      = Object.fromEntries(allSuites.map(s => [s.id, s]));
-  const rootId     = Number(sitSuiteId);
-  const root       = index[rootId];
-  if (!root) return {};
+  const allSuites = await fetchPlanSuites(planId);
+  const index     = Object.fromEntries(allSuites.map(s => [s.id, s]));
+  const rootId    = Number(sitSuiteId);
 
-  // Direct children of the root suite
-  let children = (root.children || []).map(c => index[c.id ?? c]).filter(Boolean);
-  // Fallback: scan parentSuite references when $expand=children didn't populate
-  if (!children.length) {
-    children = allSuites.filter(s => s.parentSuite?.id === rootId || s.parent?.id === rootId);
+  function directChildren(parentId) {
+    const parent = index[parentId];
+    let kids = (parent?.children || []).map(c => index[c.id ?? c]).filter(Boolean);
+    if (!kids.length)
+      kids = allSuites.filter(s => s.parentSuite?.id === parentId || s.parent?.id === parentId);
+    return kids;
   }
-  if (!children.length) return {};
 
   const result = {};
-  for (const child of children) {
-    const descendantIds = collectSuiteDescendants(child.id, allSuites);
+
+  // Walk the full suite tree recursively. parentPath is '' for direct children of root.
+  async function walk(suiteId, parentPath) {
+    const suite = index[suiteId];
+    if (!suite) return;
+    const myPath = parentPath ? `${parentPath} / ${suite.name}` : suite.name;
+
+    // Roll up all descendants of this suite into its stats
+    const descendantIds = collectSuiteDescendants(suiteId, allSuites);
     const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
     for (const sid of descendantIds) {
       const t = tallyOutcomes(await fetchSuiteTestPoints(planId, sid));
       for (const k of Object.keys(totals)) totals[k] += t[k];
     }
-    result[child.name] = totals;
+    result[myPath] = totals;
+
+    // Recurse into children
+    for (const child of directChildren(suiteId)) {
+      await walk(child.id, myPath);
+    }
   }
+
+  const topLevel = directChildren(rootId);
+  if (!topLevel.length) return {};
+  for (const child of topLevel) await walk(child.id, '');
   return result;
 }
 
