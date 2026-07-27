@@ -85,4 +85,8 @@ export async function generate(data) {
   const buf = zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
   fs.writeFileSync(outputArg, buf);
   console.log(`\nReport saved → ${outputArg}`);
+
+  // Let downstream extensions (e.g. sharepoint) know what was generated
+  data._generatedFiles = data._generatedFiles || [];
+  data._generatedFiles.push(outputArg);
 }
