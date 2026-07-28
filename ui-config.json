@@ -2,8 +2,13 @@
   "settings": {
     "fetchTestStats": true,
     "outputFormats": [
-      "ppt"
-    ]
+      "ppt",
+      "excel"
+    ],
+    "schedule": {
+      "enabled": false,
+      "cron": "0 9 * * 1"
+    }
   },
   "workstreams": [
     {

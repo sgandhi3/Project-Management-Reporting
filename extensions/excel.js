@@ -1,15 +1,17 @@
 // Excel output extension
 //
-// Creates a multi-sheet .xlsx workbook from the collected data.
+// Loads template.xlsx, replaces {{TOKEN}} placeholders in every cell with
+// live data values, repopulates the data sheets (By Workstream, Sub-Suites,
+// Bug Analysis), then writes the populated workbook to the output path.
 //
-// Config (via .env or CLI):
-//   --out <path>  — where to write the output file (default: Report_YYYY-MM-DD.xlsx in cwd)
+// This mirrors how ppt.js works: the template owns the layout/styling/charts,
+// the extension only fills in the data.
 //
-// Sheet 1: Summary       — key metrics, AI summary if present, variable token values
-// Sheet 2: By Workstream — per-workstream stats with conditional formatting
-// Sheet 3: Sub-Suites    — sub-suite breakdown (only if data exists)
-// Sheet 4: Bug Analysis  — groupBy tables (only if groupBy keys exist)
-// Sheet 5: Charts Guide  — instructions for adding charts in Excel
+// Config:
+//   EXCEL_TEMPLATE — path to the template file (default: ./template.xlsx)
+//   --out <path>   — output path (default: Report_YYYY-MM-DD.xlsx)
+//
+// To create the starter template: node create-excel-template.js
 
 import ExcelJS from 'exceljs';
 import fs from 'fs';
@@ -18,71 +20,21 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { VARIABLE_MAP } from '../variables.js';
 
-const __dirname2 = path.dirname(fileURLToPath(import.meta.url));
+const __dirname2     = path.dirname(fileURLToPath(import.meta.url));
 const UI_CONFIG_PATH = path.join(__dirname2, '..', 'ui-config.json');
 
 const args      = process.argv.slice(2);
 const getArg    = flag => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
+const TEMPLATE  = process.env.EXCEL_TEMPLATE || path.join(process.cwd(), 'template.xlsx');
 const outputArg = getArg('--out') || path.join(process.cwd(), `Report_${new Date().toISOString().slice(0, 10)}.xlsx`);
-
-// ─── Color constants ──────────────────────────────────────────────────────────
-const ACCENT       = '2563EB';
-const WHITE        = 'FFFFFFFF';
-const GREEN_FILL   = 'FFD1FAE5';
-const RED_FILL     = 'FFFEE2E2';
-const YELLOW_FILL  = 'FFFEF3C7';
-const ALT_ROW      = 'FFF8FAFC';
-const HEADER_FILL  = 'FFE0E7FF';
-
-// ─── Style helpers ────────────────────────────────────────────────────────────
-
-function applyFont(cell, bold = false, size = 11, color = null) {
-  cell.font = { name: 'Calibri', size, bold, ...(color ? { color: { argb: color } } : {}) };
-}
-
-function applyFill(cell, argb) {
-  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
-}
-
-function applyBorder(cell) {
-  const thin = { style: 'thin', color: { argb: 'FFD1D5DB' } };
-  cell.border = { top: thin, left: thin, bottom: thin, right: thin };
-}
-
-function applyHeaderStyle(cell, text) {
-  cell.value = text;
-  applyFont(cell, true, 12, WHITE);
-  applyFill(cell, 'FF' + ACCENT);
-  cell.alignment = { vertical: 'middle', horizontal: 'center' };
-  applyBorder(cell);
-}
-
-function applyAltRow(row, colCount, even) {
-  if (!even) return;
-  for (let c = 1; c <= colCount; c++) {
-    const cell = row.getCell(c);
-    if (!cell.fill || cell.fill.fgColor?.argb === 'FFFFFFFF') {
-      applyFill(cell, ALT_ROW);
-    }
-  }
-}
-
-function freezeAndFilter(sheet, ySplit = 1) {
-  sheet.views = [{ state: 'frozen', ySplit }];
-}
-
-function setColWidths(sheet, widths) {
-  widths.forEach((w, i) => {
-    sheet.getColumn(i + 1).width = w;
-  });
-}
 
 // ─── Variable resolution (same as ppt.js) ─────────────────────────────────────
 
-function buildEffectiveMap(data) {
+function buildReplacements(data) {
   let effectiveMap = VARIABLE_MAP;
+
   if (existsSync(UI_CONFIG_PATH)) {
-    const uiConfig = JSON.parse(readFileSync(UI_CONFIG_PATH, 'utf8'));
+    const uiConfig  = JSON.parse(readFileSync(UI_CONFIG_PATH, 'utf8'));
     const uiMappings = uiConfig.variableMappings || [];
     if (uiMappings.length > 0) {
       effectiveMap = {};
@@ -92,171 +44,132 @@ function buildEffectiveMap(data) {
       }
     }
   }
-  const resolved = {};
+
+  const replacements = {};
   for (const [key, getter] of Object.entries(effectiveMap)) {
-    try { resolved[key] = String(getter(data) ?? ''); }
-    catch { resolved[key] = ''; }
-  }
-  return resolved;
-}
-
-// ─── Sheet 1: Summary ─────────────────────────────────────────────────────────
-
-function buildSummarySheet(wb, data, resolved) {
-  const ws = wb.addWorksheet('Summary');
-  setColWidths(ws, [24, 18, 18, 18, 18, 18]);
-  freezeAndFilter(ws);
-
-  const today = new Date().toISOString().slice(0, 10);
-  let row = 1;
-
-  // Title row — merged across 6 cols
-  const titleRow = ws.getRow(row);
-  titleRow.height = 28;
-  const titleCell = ws.getCell(`A${row}`);
-  titleCell.value = `Weekly SIT Status Report — ${today}`;
-  applyFont(titleCell, true, 16, WHITE);
-  applyFill(titleCell, 'FF' + ACCENT);
-  titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
-  ws.mergeCells(`A${row}:F${row}`);
-  row++;
-
-  // Blank row
-  row++;
-
-  // KEY METRICS label
-  const kmCell = ws.getCell(`A${row}`);
-  kmCell.value = 'KEY METRICS';
-  applyFont(kmCell, true, 12);
-  row++;
-
-  // Metric table header
-  ['Metric', 'Value'].forEach((h, i) => {
-    const cell = ws.getCell(row, i + 1);
-    applyHeaderStyle(cell, h);
-  });
-  row++;
-
-  const c = data.consolidatedData || {};
-  const passRate = c.executed ? Math.round((c.passed / c.executed) * 100) : 0;
-  const failRate = c.executed ? Math.round((c.failed / c.executed) * 100) : 0;
-  const metrics = [
-    ['Total Planned',  c.planned    ?? 0, null],
-    ['Total Executed', c.executed   ?? 0, null],
-    ['Total Passed',   c.passed     ?? 0, GREEN_FILL],
-    ['Total Failed',   c.failed     ?? 0, RED_FILL],
-    ['Pass Rate %',    `${passRate}%`,  null],
-    ['Fail Rate %',    `${failRate}%`,  null],
-  ];
-
-  metrics.forEach(([label, value, fill], idx) => {
-    const dataRow = ws.getRow(row);
-    const labelCell = dataRow.getCell(1);
-    const valueCell = dataRow.getCell(2);
-    labelCell.value = label;
-    valueCell.value = value;
-    applyFont(labelCell, false, 11);
-    applyFont(valueCell, true, 11);
-    applyBorder(labelCell);
-    applyBorder(valueCell);
-    if (fill) {
-      applyFill(labelCell, fill);
-      applyFill(valueCell, fill);
-    } else if (idx % 2 === 0) {
-      applyFill(labelCell, ALT_ROW);
-      applyFill(valueCell, ALT_ROW);
+    try {
+      replacements[`{{${key}}}`] = String(getter(data) ?? '');
+    } catch {
+      replacements[`{{${key}}}`] = '';
     }
-    row++;
-  });
-
-  // AI Summary section
-  if (data._aiSummary) {
-    row++;
-    const aiLabelCell = ws.getCell(`A${row}`);
-    aiLabelCell.value = 'AI SUMMARY';
-    applyFont(aiLabelCell, true, 12, ACCENT);
-    row++;
-
-    const aiCell = ws.getCell(`A${row}`);
-    aiCell.value = data._aiSummary;
-    aiCell.alignment = { wrapText: true, vertical: 'top' };
-    applyFont(aiCell, false, 11);
-    applyFill(aiCell, 'FFE0E7FF');
-    ws.mergeCells(`A${row}:F${row}`);
-    ws.getRow(row).height = Math.min(200, 15 * Math.ceil(data._aiSummary.length / 80));
-    row++;
   }
+  return replacements;
+}
 
-  // Variable token values at bottom
-  const tokenEntries = Object.entries(resolved).filter(([token]) => token);
-  if (tokenEntries.length > 0) {
-    row++;
-    const vlCell = ws.getCell(`A${row}`);
-    vlCell.value = 'VARIABLE TOKEN VALUES';
-    applyFont(vlCell, true, 12);
-    row++;
+// ─── Token replacement ────────────────────────────────────────────────────────
 
-    ['Token', 'Value'].forEach((h, i) => {
-      const cell = ws.getCell(row, i + 1);
-      applyHeaderStyle(cell, h);
-    });
-    row++;
-
-    tokenEntries.forEach(([token, value], idx) => {
-      const dataRow = ws.getRow(row);
-      const tCell = dataRow.getCell(1);
-      const vCell = dataRow.getCell(2);
-      tCell.value = `{{${token}}}`;
-      vCell.value = value;
-      applyFont(tCell, false, 10);
-      applyFont(vCell, false, 10);
-      applyBorder(tCell);
-      applyBorder(vCell);
-      if (idx % 2 === 0) {
-        applyFill(tCell, ALT_ROW);
-        applyFill(vCell, ALT_ROW);
+function replaceTokensInSheet(sheet, replacements) {
+  sheet.eachRow({ includeEmpty: false }, row => {
+    row.eachCell({ includeEmpty: false }, cell => {
+      if (typeof cell.value === 'string' && cell.value.includes('{{')) {
+        let val = cell.value;
+        for (const [token, replacement] of Object.entries(replacements)) {
+          val = val.split(token).join(replacement);
+        }
+        cell.value = val;
       }
-      row++;
+    });
+  });
+}
+
+// ─── Style helpers for data rows ──────────────────────────────────────────────
+
+const GREEN  = 'FFD1FAE5';
+const RED    = 'FFFEE2E2';
+const YELLOW = 'FFFEF3C7';
+const ALT    = 'FFF8FAFC';
+const ACCENT = 'FF2563EB';
+const WHITE  = 'FFFFFFFF';
+const HFILL  = 'FFE0E7FF';
+
+function applyFill(cell, argb) {
+  cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } };
+}
+
+function applyBorder(cell) {
+  const t = { style: 'thin', color: { argb: 'FFD1D5DB' } };
+  cell.border = { top: t, left: t, bottom: t, right: t };
+}
+
+function setDataCell(cell, value, { bold = false, fillArgb = null, align = 'left' } = {}) {
+  cell.value = value;
+  cell.font  = { name: 'Calibri', size: 11, bold };
+  cell.alignment = { vertical: 'middle', horizontal: align };
+  applyBorder(cell);
+  if (fillArgb) applyFill(cell, fillArgb);
+}
+
+function setHeaderCell(cell, text) {
+  cell.value = text;
+  cell.font  = { name: 'Calibri', size: 12, bold: true, color: { argb: WHITE } };
+  cell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
+  cell.border = { top: { style: 'thin', color: { argb: 'FFD1D5DB' } }, left: { style: 'thin', color: { argb: 'FFD1D5DB' } }, bottom: { style: 'thin', color: { argb: 'FFD1D5DB' } }, right: { style: 'thin', color: { argb: 'FFD1D5DB' } } };
+  cell.alignment = { vertical: 'middle', horizontal: 'center' };
+}
+
+// Unmerge every merged range that touches rows fromRow..toRow, then re-merge safely
+function clearMergesInRange(sheet, fromRow, toRow) {
+  const toRemove = [];
+  sheet._merges && Object.keys(sheet._merges).forEach(key => {
+    const m = sheet._merges[key];
+    // m.model has { top, bottom, left, right }
+    const model = m.model || m;
+    if (model.top >= fromRow && model.bottom <= toRow) toRemove.push(key);
+  });
+  for (const key of toRemove) {
+    try { sheet.unMergeCells(key); } catch { /* ignore */ }
+  }
+}
+
+function safeMerge(sheet, range) {
+  try { sheet.unMergeCells(range); } catch { /* already unmerged */ }
+  sheet.mergeCells(range);
+}
+
+// ─── Clear data rows (rows 2+) in a sheet, preserving row 1 header ───────────
+
+function clearDataRows(sheet, fromRow = 2, toRow = 200) {
+  for (let r = fromRow; r <= toRow; r++) {
+    const row = sheet.getRow(r);
+    // Stop clearing once we hit genuinely empty rows well past our data
+    let hasContent = false;
+    row.eachCell({ includeEmpty: false }, () => { hasContent = true; });
+    if (!hasContent && r > fromRow + 5) break;
+    row.eachCell({ includeEmpty: true }, cell => {
+      cell.value  = null;
+      cell.fill   = { type: 'pattern', pattern: 'none' };
+      cell.border = {};
+      cell.font   = {};
     });
   }
 }
 
-// ─── Sheet 2: By Workstream ───────────────────────────────────────────────────
+// ─── Populate By Workstream sheet ─────────────────────────────────────────────
 
-function buildWorkstreamSheet(wb, data) {
-  const ws = wb.addWorksheet('By Workstream');
-  const cols = ['Workstream', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Pass %'];
-  setColWidths(ws, [22, 12, 12, 12, 12, 14, 14, 12]);
-  freezeAndFilter(ws);
+function populateWorkstreamSheet(wb, data) {
+  const ws = wb.getWorksheet('By Workstream');
+  if (!ws || !data.stats) return;
 
-  // Header
-  cols.forEach((h, i) => applyHeaderStyle(ws.getCell(1, i + 1), h));
-  ws.getRow(1).height = 22;
+  clearDataRows(ws);
 
-  const stats   = data.stats || {};
-  const entries = Object.entries(stats);
+  const entries = Object.entries(data.stats);
   let totalPlan = 0, totalExec = 0, totalPass = 0, totalFail = 0, totalNS = 0, totalIP = 0;
 
-  entries.forEach(([ws_name, s], idx) => {
-    const row = ws.getRow(idx + 2);
-    const passP = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
-    const values = [ws_name, s.planned, s.executed, s.passed, s.failed, s.notStarted, s.inProgress, `${passP}%`];
-    values.forEach((v, ci) => {
-      const cell = row.getCell(ci + 1);
-      cell.value = v;
-      applyFont(cell, false, 11);
-      applyBorder(cell);
-      // Conditional formatting
-      if (ci === 3 && s.passed > 0) applyFill(cell, GREEN_FILL);       // Passed
-      else if (ci === 4 && s.failed > 0) applyFill(cell, RED_FILL);    // Failed
-      else if (ci === 7) {                                               // Pass %
-        if (passP >= 80) applyFill(cell, GREEN_FILL);
-        else if (passP >= 60) applyFill(cell, YELLOW_FILL);
-        else applyFill(cell, RED_FILL);
-      } else if (idx % 2 === 0) {
-        applyFill(cell, ALT_ROW);
-      }
-    });
+  entries.forEach(([wsName, s], idx) => {
+    const row    = ws.getRow(idx + 2);
+    const passP  = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
+    const rowFill = idx % 2 === 0 ? ALT : null;
+
+    setDataCell(row.getCell(1), wsName,        { fillArgb: rowFill });
+    setDataCell(row.getCell(2), s.planned,     { fillArgb: rowFill,                         align: 'center' });
+    setDataCell(row.getCell(3), s.executed,    { fillArgb: rowFill,                         align: 'center' });
+    setDataCell(row.getCell(4), s.passed,      { fillArgb: s.passed > 0 ? GREEN : rowFill,  align: 'center' });
+    setDataCell(row.getCell(5), s.failed,      { fillArgb: s.failed > 0 ? RED   : rowFill,  align: 'center' });
+    setDataCell(row.getCell(6), s.notStarted,  { fillArgb: rowFill,                         align: 'center' });
+    setDataCell(row.getCell(7), s.inProgress,  { fillArgb: rowFill,                         align: 'center' });
+    const pf = passP >= 80 ? GREEN : passP >= 60 ? YELLOW : RED;
+    setDataCell(row.getCell(8), `${passP}%`,   { fillArgb: pf, align: 'center' });
+
     totalPlan += s.planned; totalExec += s.executed;
     totalPass += s.passed;  totalFail += s.failed;
     totalNS   += s.notStarted; totalIP += s.inProgress;
@@ -264,94 +177,78 @@ function buildWorkstreamSheet(wb, data) {
 
   // Total row
   const totalRowIdx = entries.length + 2;
-  const totalRow = ws.getRow(totalRowIdx);
-  const totalPassPct = totalExec ? Math.round((totalPass / totalExec) * 100) : 0;
-  const totals = ['TOTAL', totalPlan, totalExec, totalPass, totalFail, totalNS, totalIP, `${totalPassPct}%`];
-  totals.forEach((v, i) => {
-    const cell = totalRow.getCell(i + 1);
-    cell.value = v;
-    applyFont(cell, true, 11);
-    applyFill(cell, HEADER_FILL);
-    applyBorder(cell);
-  });
-
-  ws.autoFilter = { from: 'A1', to: `H1` };
-  return entries.length;
+  const totalPassP  = totalExec ? Math.round((totalPass / totalExec) * 100) : 0;
+  const totalRow    = ws.getRow(totalRowIdx);
+  [['TOTAL', null], [totalPlan, null], [totalExec, null], [totalPass, GREEN], [totalFail, RED],
+   [totalNS, null], [totalIP, null], [`${totalPassP}%`, totalPassP >= 80 ? GREEN : totalPassP >= 60 ? YELLOW : RED]]
+    .forEach(([v, f], i) => {
+      const cell = totalRow.getCell(i + 1);
+      setDataCell(cell, v, { bold: true, fillArgb: f || HFILL, align: i === 0 ? 'left' : 'center' });
+    });
 }
 
-// ─── Sheet 3: Sub-Suites ──────────────────────────────────────────────────────
+// ─── Populate Sub-Suites sheet ────────────────────────────────────────────────
 
-function buildSubSuitesSheet(wb, data) {
-  const subStats = data.subStats || {};
-  const hasAny = Object.values(subStats).some(v => Object.keys(v).length > 0);
-  if (!hasAny) return false;
+function populateSubSuitesSheet(wb, data) {
+  const ws = wb.getWorksheet('Sub-Suites');
+  if (!ws || !data.subStats) return;
 
-  const ws = wb.addWorksheet('Sub-Suites');
-  const cols = ['Suite', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Pass %'];
-  setColWidths(ws, [38, 12, 12, 12, 12, 14, 14, 12]);
-  freezeAndFilter(ws);
+  const hasAny = Object.values(data.subStats).some(v => Object.keys(v).length > 0);
+  if (!hasAny) return;
 
-  // Header
-  cols.forEach((h, i) => applyHeaderStyle(ws.getCell(1, i + 1), h));
-  ws.getRow(1).height = 22;
+  clearMergesInRange(ws, 2, 500);
+  clearDataRows(ws);
 
   let rowIdx = 2;
   let altCount = 0;
 
-  for (const [wsName, suites] of Object.entries(subStats)) {
+  for (const [wsName, suites] of Object.entries(data.subStats)) {
     if (Object.keys(suites).length === 0) continue;
 
-    // Workstream header row
-    const headerRow = ws.getRow(rowIdx);
-    const headerCell = headerRow.getCell(1);
-    headerCell.value = wsName;
-    applyFont(headerCell, true, 12, WHITE);
-    applyFill(headerCell, 'FF' + ACCENT);
-    ws.mergeCells(`A${rowIdx}:H${rowIdx}`);
+    // Workstream group header
+    const hRow  = ws.getRow(rowIdx);
+    const hCell = hRow.getCell(1);
+    hCell.value = wsName;
+    hCell.font  = { name: 'Calibri', size: 12, bold: true, color: { argb: WHITE } };
+    hCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
+    safeMerge(ws, `A${rowIdx}:H${rowIdx}`);
     rowIdx++;
 
     for (const [suitePath, s] of Object.entries(suites)) {
       const depth  = (suitePath.match(/ \/ /g) || []).length;
       const indent = '  '.repeat(depth);
-      const label  = suitePath.split(' / ').pop();
+      const label  = indent + suitePath.split(' / ').pop();
       const passP  = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
-      const values = [`${indent}${label}`, s.planned, s.executed, s.passed, s.failed, s.notStarted, s.inProgress, `${passP}%`];
+      const rowFill = altCount % 2 === 0 ? ALT : null;
       const row    = ws.getRow(rowIdx);
 
-      values.forEach((v, ci) => {
-        const cell = row.getCell(ci + 1);
-        cell.value = v;
-        applyFont(cell, ci === 0 && depth === 0, 11);
-        applyBorder(cell);
-        // Conditional formatting
-        if (ci === 3 && s.passed > 0) applyFill(cell, GREEN_FILL);
-        else if (ci === 4 && s.failed > 0) applyFill(cell, RED_FILL);
-        else if (ci === 7) {
-          if (passP >= 80) applyFill(cell, GREEN_FILL);
-          else if (passP >= 60) applyFill(cell, YELLOW_FILL);
-          else applyFill(cell, RED_FILL);
-        } else if (altCount % 2 === 0) {
-          applyFill(cell, ALT_ROW);
-        }
-      });
+      setDataCell(row.getCell(1), label,       { bold: depth === 0, fillArgb: rowFill });
+      setDataCell(row.getCell(2), s.planned,   { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(3), s.executed,  { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(4), s.passed,    { fillArgb: s.passed > 0 ? GREEN : rowFill, align: 'center' });
+      setDataCell(row.getCell(5), s.failed,    { fillArgb: s.failed > 0 ? RED   : rowFill, align: 'center' });
+      setDataCell(row.getCell(6), s.notStarted,{ fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(7), s.inProgress,{ fillArgb: rowFill, align: 'center' });
+      const pf = passP >= 80 ? GREEN : passP >= 60 ? YELLOW : RED;
+      setDataCell(row.getCell(8), `${passP}%`, { fillArgb: pf, align: 'center' });
+
       altCount++;
       rowIdx++;
     }
   }
-
-  ws.autoFilter = { from: 'A1', to: 'H1' };
-  return true;
 }
 
-// ─── Sheet 4: Bug Analysis ────────────────────────────────────────────────────
+// ─── Populate Bug Analysis sheet ──────────────────────────────────────────────
 
-function buildBugSheet(wb, data) {
+function populateBugSheet(wb, data) {
+  const ws = wb.getWorksheet('Bug Analysis');
+  if (!ws) return;
+
   const groupByKeys = Object.keys(data).filter(k => /By[A-Z]/.test(k));
-  if (groupByKeys.length === 0) return false;
+  if (groupByKeys.length === 0) return;
 
-  const ws = wb.addWorksheet('Bug Analysis');
-  setColWidths(ws, [30, 14, 14]);
-  freezeAndFilter(ws);
+  clearMergesInRange(ws, 1, 300);
+  clearDataRows(ws, 1, 300);
 
   let rowIdx = 1;
 
@@ -359,107 +256,55 @@ function buildBugSheet(wb, data) {
     const val = data[key];
     if (!val || typeof val !== 'object') continue;
 
-    // Section header
-    const headerRow = ws.getRow(rowIdx);
-    const headerCell = headerRow.getCell(1);
-    headerCell.value = key;
-    applyFont(headerCell, true, 12, WHITE);
-    applyFill(headerCell, 'FF' + ACCENT);
-    ws.mergeCells(`A${rowIdx}:C${rowIdx}`);
+    const hCell = ws.getCell(rowIdx, 1);
+    hCell.value = key;
+    hCell.font  = { name: 'Calibri', size: 12, bold: true, color: { argb: WHITE } };
+    hCell.fill  = { type: 'pattern', pattern: 'solid', fgColor: { argb: ACCENT } };
+    safeMerge(ws, `A${rowIdx}:C${rowIdx}`);
     rowIdx++;
 
-    // Column headers
-    ['Value', 'Count', '%'].forEach((h, i) => {
-      applyHeaderStyle(ws.getCell(rowIdx, i + 1), h);
-    });
+    setHeaderCell(ws.getCell(rowIdx, 1), 'Value');
+    setHeaderCell(ws.getCell(rowIdx, 2), 'Count');
+    setHeaderCell(ws.getCell(rowIdx, 3), '%');
     rowIdx++;
 
     const { total, ...buckets } = val;
     const sorted = Object.entries(buckets).sort((a, b) => b[1] - a[1]);
 
     sorted.forEach(([label, count], idx) => {
-      const pct  = total > 0 ? Math.round((count / total) * 100) : 0;
-      const row  = ws.getRow(rowIdx);
-      [label, count, `${pct}%`].forEach((v, ci) => {
-        const cell = row.getCell(ci + 1);
-        cell.value = v;
-        applyFont(cell, false, 11);
-        applyBorder(cell);
-        if (idx % 2 === 0) applyFill(cell, ALT_ROW);
-      });
+      const pct     = total > 0 ? Math.round((count / total) * 100) : 0;
+      const rowFill = idx % 2 === 0 ? ALT : null;
+      setDataCell(ws.getCell(rowIdx, 1), label,    { fillArgb: rowFill });
+      setDataCell(ws.getCell(rowIdx, 2), count,    { fillArgb: rowFill, align: 'center' });
+      setDataCell(ws.getCell(rowIdx, 3), `${pct}%`,{ fillArgb: rowFill, align: 'center' });
       rowIdx++;
     });
 
-    rowIdx++; // blank row between sections
+    rowIdx++; // blank between sections
   }
-
-  return true;
-}
-
-// ─── Sheet 5: Charts Guide ────────────────────────────────────────────────────
-
-function buildChartsGuideSheet(wb, wsCount) {
-  const ws = wb.addWorksheet('Charts Guide');
-  setColWidths(ws, [60]);
-
-  let row = 1;
-
-  const titleCell = ws.getCell(`A${row}`);
-  titleCell.value = 'How to Add Charts in Excel';
-  applyFont(titleCell, true, 16, ACCENT);
-  row += 2;
-
-  const instructions = [
-    'The data in sheets 2–4 is structured for charting. Follow these steps:',
-    '',
-    '1. Select the data range on the target sheet.',
-    '2. Go to Insert → Charts → and pick the recommended chart type below.',
-    '3. Customize titles, colors, and labels as needed.',
-    '',
-    'RECOMMENDED CHARTS PER SHEET',
-    '',
-    `Sheet 2 — "By Workstream":`,
-    `  • Select A1:H${wsCount + 1} and insert a Clustered Bar chart.`,
-    '  • This shows Planned vs Executed vs Passed vs Failed per workstream.',
-    '  • Alternatively, select just the Workstream + Pass % columns for a simple pass-rate chart.',
-    '',
-    `Sheet 3 — "Sub-Suites":`,
-    '  • Select the rows for a specific workstream block and insert a Stacked Bar chart.',
-    '  • This visualizes test execution breakdown per sub-suite.',
-    '',
-    `Sheet 4 — "Bug Analysis":`,
-    '  • Each section (bugsBy*) can be charted with a Pie or Donut chart.',
-    '  • Select the Value and Count columns for any section and insert Pie chart.',
-    '',
-    'TIP: Use "Recommended Charts" (Insert → Recommended Charts) for automatic suggestions.',
-  ];
-
-  instructions.forEach(line => {
-    const cell = ws.getCell(`A${row}`);
-    cell.value = line;
-    if (line.startsWith('RECOMMENDED') || line.startsWith('Sheet')) {
-      applyFont(cell, true, 11);
-    } else {
-      applyFont(cell, false, 11);
-    }
-    cell.alignment = { wrapText: true };
-    row++;
-  });
 }
 
 // ─── Main generate function ───────────────────────────────────────────────────
 
 export async function generate(data) {
-  const resolved  = buildEffectiveMap(data);
-  const wb        = new ExcelJS.Workbook();
-  wb.creator      = 'MMO Report Generator';
-  wb.created      = new Date();
+  if (!fs.existsSync(TEMPLATE)) {
+    console.error(`\n❌  Excel template not found: ${TEMPLATE}`);
+    console.error('    Run: node create-excel-template.js');
+    return;
+  }
 
-  buildSummarySheet(wb, data, resolved);
-  const wsCount = buildWorkstreamSheet(wb, data);
-  buildSubSuitesSheet(wb, data);
-  buildBugSheet(wb, data);
-  buildChartsGuideSheet(wb, wsCount);
+  const replacements = buildReplacements(data);
+
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile(TEMPLATE);
+
+  // Replace {{TOKEN}} in all cells across all sheets (Summary sheet primarily)
+  wb.eachSheet(sheet => replaceTokensInSheet(sheet, replacements));
+
+  // Repopulate dynamic data sheets with live data
+  populateWorkstreamSheet(wb, data);
+  populateSubSuitesSheet(wb, data);
+  populateBugSheet(wb, data);
 
   await wb.xlsx.writeFile(outputArg);
   console.log(`\nExcel report saved → ${outputArg}`);

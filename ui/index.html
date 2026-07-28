@@ -557,6 +557,10 @@
       <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
       Settings
     </div>
+    <div class="nav-item" data-tab="ai" onclick="activateTab('ai')">
+      <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2a5 5 0 0 1 5 5c0 1.8-.96 3.37-2.4 4.23L14 12v1h-4v-1l-.6-.77A5 5 0 0 1 7 7a5 5 0 0 1 5-5z"/><path d="M10 18h4"/><path d="M11 13v5"/><path d="M13 13v5"/><circle cx="9" cy="21" r="1"/><circle cx="15" cy="21" r="1"/></svg>
+      AI
+    </div>
     <div class="nav-item" data-tab="data" onclick="activateTab('data')">
       <svg class="nav-icon" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
       Data Preview
@@ -597,8 +601,9 @@
           <input type="text" id="env-PPTX_TEMPLATE" placeholder="./temp.pptx">
         </div>
         <div class="form-group">
-          <label for="env-SUMMARY_NOTES_FILE">Summary Notes File</label>
-          <input type="text" id="env-SUMMARY_NOTES_FILE" placeholder="./notes.csv">
+          <label for="env-EXCEL_TEMPLATE">Excel Template Path</label>
+          <input type="text" id="env-EXCEL_TEMPLATE" placeholder="./template.xlsx">
+          <span class="hint">Run <code>node create-excel-template.js</code> to generate a starter template</span>
         </div>
       </div>
     </div>
@@ -660,23 +665,6 @@
           <span class="hint">Required for the ai-summary extension</span>
         </div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">AI Context File</div>
-      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
-        Upload a context file (CSV, TXT, XLSX, MD) to provide additional project notes for the AI summary.
-        The file is saved to the project root and reused on every run.
-      </p>
-      <div class="form-group" style="margin-bottom:12px;">
-        <label>Currently uploaded file</label>
-        <div id="ai-context-file-path" style="font-size:13px;color:var(--text-muted);padding:6px 0;">Loading...</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-        <input type="file" id="ai-context-file-input" accept=".csv,.txt,.xlsx,.md" style="font-size:13px;">
-        <button class="btn btn-secondary" onclick="uploadContextFile()">Upload</button>
-      </div>
-      <div id="ai-context-upload-msg" style="display:none;margin-top:10px;font-size:13px;color:var(--success);"></div>
     </div>
 
     <div class="card">
@@ -852,6 +840,10 @@
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- ── Tab: AI ────────────────────────────────────────────────────────────── -->
+  <div id="tab-ai" class="tab-content">
     <div class="card">
       <div class="card-title">AI Settings</div>
       <div class="setting-row">
@@ -877,6 +869,22 @@
       <div style="display:flex;justify-content:flex-end;margin-top:14px;">
         <button class="btn btn-primary" onclick="saveAiSettings()">Save AI Settings</button>
       </div>
+    </div>
+    <div class="card">
+      <div class="card-title">AI Context File</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Upload a context file (CSV, TXT, XLSX, MD) to provide additional project notes for the AI summary.
+        The file is saved to the project root and reused on every run — no need to re-upload.
+      </p>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Currently uploaded file</label>
+        <div id="ai-context-file-path" style="font-size:13px;color:var(--text-muted);padding:6px 0;">Loading...</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <input type="file" id="ai-context-file-input" accept=".csv,.txt,.xlsx,.md" style="font-size:13px;">
+        <button class="btn btn-secondary" onclick="uploadContextFile()">Upload</button>
+      </div>
+      <div id="ai-context-upload-msg" style="display:none;margin-top:10px;font-size:13px;color:var(--success);"></div>
     </div>
   </div>
 
@@ -1002,6 +1010,7 @@ const TAB_TITLES = {
   queries:      ['Queries',               'Define what data is fetched each run'],
   variables:    ['Variables',             'Map PPT/Excel tokens to data paths'],
   settings:     ['Settings',              'Output format and behavior options'],
+  ai:           ['AI',                    'Prompt, context file, and output settings for the AI summary'],
   data:         ['Data Preview',          'Fetch and visualize collected data without generating a report'],
   run:          ['Run Report',            'Execute the report generator'],
 };
@@ -1024,11 +1033,12 @@ function activateTab(tabId) {
 }
 
 async function loadTab(tabId) {
-  if (tabId === 'credentials') { await loadCredentials(); await loadAiSettings(); }
+  if (tabId === 'credentials') await loadCredentials();
   if (tabId === 'workstreams') await loadWorkstreams();
   if (tabId === 'queries')     await loadQueries();
   if (tabId === 'variables')   await loadVariables();
-  if (tabId === 'settings')    { await loadSettings(); await loadAiSettings(); }
+  if (tabId === 'settings')    await loadSettings();
+  if (tabId === 'ai')          await loadAiSettings();
   if (tabId === 'data')        { /* manual fetch via button */ }
 }
 
