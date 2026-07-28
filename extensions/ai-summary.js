@@ -2,35 +2,63 @@
 //
 // Calls Claude to generate an executive status summary from:
 //   1. The collected data object (test stats, bugs, workstream counts)
-//   2. An optional external notes source — any URL that returns plain text or CSV
-//      (e.g. a Google Sheet published as CSV, a SharePoint file export link, etc.)
+//   2. An optional external notes source — a file path (from ui-config or env var)
+//      or a URL that returns plain text or CSV.
 //
 // Config (via .env):
 //   ANTHROPIC_API_KEY  — your Anthropic API key
 //   SUMMARY_NOTES_URL  — URL to your online notes/Excel export (optional but recommended)
+//   SUMMARY_NOTES_FILE — path to a local notes/context file (optional)
 //   SUMMARY_OUTPUT     — where to save the generated text (default: Summary_YYYY-MM-DD.txt)
+//
+// Config (via ui-config.json settings.aiSettings):
+//   systemPrompt       — overrides the built-in system prompt
+//   userPromptSuffix   — appended to the data/notes block
+//   contextFile        — path to a context file (overrides SUMMARY_NOTES_FILE)
+//   saveToFile         — if false, skip writing to disk (default: true)
 
 import fs   from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import Anthropic from '@anthropic-ai/sdk';
+
+const __dirname2   = path.dirname(fileURLToPath(import.meta.url));
+const UI_CONFIG_PATH = path.join(__dirname2, '..', 'ui-config.json');
 
 const outputPath = process.env.SUMMARY_OUTPUT
   || path.join(process.cwd(), `Summary_${new Date().toISOString().slice(0, 10)}.txt`);
 
+// ─── Read ai settings from ui-config ─────────────────────────────────────────
+
+function readAiSettings() {
+  try {
+    if (fs.existsSync(UI_CONFIG_PATH)) {
+      const cfg = JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8'));
+      return cfg.settings?.aiSettings || {};
+    }
+  } catch { /* ignore */ }
+  return {};
+}
+
 // ─── Notes loader ─────────────────────────────────────────────────────────────
 
-async function fetchNotes() {
-  const file = process.env.SUMMARY_NOTES_FILE;
-  const url  = process.env.SUMMARY_NOTES_URL;
+async function fetchNotes(aiSettings) {
+  // ui-config contextFile takes precedence over SUMMARY_NOTES_FILE env var
+  const configFile = aiSettings.contextFile;
+  const envFile    = process.env.SUMMARY_NOTES_FILE;
+  const url        = process.env.SUMMARY_NOTES_URL;
+
+  const file = configFile || envFile;
 
   if (file) {
     const resolved = path.resolve(file);
     if (!fs.existsSync(resolved)) {
-      console.warn(`  ⚠  SUMMARY_NOTES_FILE not found: ${resolved}`);
-      return null;
+      console.warn(`  ⚠  Context file not found: ${resolved}`);
+      // Fall through to URL if available
+    } else {
+      console.log(`  Notes loaded from file: ${resolved}`);
+      return fs.readFileSync(resolved, 'utf8');
     }
-    console.log(`  Notes loaded from file: ${resolved}`);
-    return fs.readFileSync(resolved, 'utf8');
   }
 
   if (url) {
@@ -107,15 +135,10 @@ function formatDataForPrompt(data) {
 
 // ─── Prompt builder ───────────────────────────────────────────────────────────
 
-function buildPrompt(data, notes) {
-  const dataBlock = formatDataForPrompt(data);
-  const notesBlock = notes
-    ? `\nADDITIONAL NOTES / PROJECT CONTEXT\n${'─'.repeat(60)}\n${notes.slice(0, 8000)}\n`
-    : '';
+const BUILT_IN_SYSTEM_PROMPT = `You are a senior QA manager writing a weekly status update for a SIT (System Integration Testing) program. Be concise, factual, and professional.`;
 
-  return `You are a senior QA manager writing a weekly status update for a SIT (System Integration Testing) program.
-
-Below is the current test execution data and bug summary, followed by any additional project notes.
+const BUILT_IN_USER_TEMPLATE = (dataBlock, notesBlock, suffix) =>
+  `Below is the current test execution data and bug summary, followed by any additional project notes.
 
 ${dataBlock}${notesBlock}
 ---
@@ -128,7 +151,17 @@ Write a concise status update in exactly two sections:
 **Bug Triage:**
 1–2 sentences summarizing the open bug situation: total count, severity/priority breakdown, and triage status. Reference any owners or next steps if the notes mention them.
 
-Do not add headers beyond the two above. Do not invent facts not supported by the data. Match the tone: direct, professional, past-tense for completed work, present/future for ongoing.`;
+Do not add headers beyond the two above. Do not invent facts not supported by the data. Match the tone: direct, professional, past-tense for completed work, present/future for ongoing.${suffix ? '\n\n' + suffix : ''}`;
+
+function buildMessages(data, notes, aiSettings) {
+  const dataBlock  = formatDataForPrompt(data);
+  const notesBlock = notes
+    ? `\nADDITIONAL NOTES / PROJECT CONTEXT\n${'─'.repeat(60)}\n${notes.slice(0, 8000)}\n`
+    : '';
+  const suffix = aiSettings.userPromptSuffix || '';
+
+  const userContent = BUILT_IN_USER_TEMPLATE(dataBlock, notesBlock, suffix);
+  return { userContent };
 }
 
 // ─── Provider interface ───────────────────────────────────────────────────────
@@ -141,16 +174,21 @@ export async function generate(data) {
 
   console.log('\nGenerating AI status summary...');
 
-  const notes   = await fetchNotes();
-  const prompt  = buildPrompt(data, notes);
-  const client  = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const aiSettings = readAiSettings();
+  const notes      = await fetchNotes(aiSettings);
+  const { userContent } = buildMessages(data, notes, aiSettings);
+  const client     = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  // Use custom system prompt if configured, otherwise use built-in
+  const systemPrompt = aiSettings.systemPrompt || BUILT_IN_SYSTEM_PROMPT;
 
   let summary;
   try {
     const response = await client.messages.create({
-      model:      'claude-sonnet-5',
+      model:      'claude-sonnet-4-5',
       max_tokens: 512,
-      messages:   [{ role: 'user', content: prompt }],
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userContent }],
     });
     summary = response.content[0].text;
   } catch (e) {
@@ -158,13 +196,21 @@ export async function generate(data) {
     return;
   }
 
+  // Store in data for downstream extensions (ppt, excel)
+  data._aiSummary = summary;
+
   const divider = '─'.repeat(64);
   console.log(`\n${divider}`);
   console.log(' AI STATUS SUMMARY');
   console.log(divider);
+  console.log('__AI_START__');
   console.log('\n' + summary + '\n');
+  console.log('__AI_END__');
   console.log(divider + '\n');
 
-  fs.writeFileSync(outputPath, summary);
-  console.log(`Summary saved → ${outputPath}`);
+  // Write to file unless explicitly disabled
+  if (aiSettings.saveToFile !== false) {
+    fs.writeFileSync(outputPath, summary);
+    console.log(`Summary saved → ${outputPath}`);
+  }
 }

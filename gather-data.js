@@ -233,6 +233,15 @@ async function main() {
 
   printDataSnapshot(data);
 
+  // Run AI first if enabled — populates data._aiSummary for use by ppt/excel
+  const aiIdx = OUTPUTS.indexOf('ai-summary');
+  if (aiIdx !== -1) {
+    const aiExt = await import('./extensions/ai-summary.js');
+    await aiExt.generate(data);
+    OUTPUTS.splice(aiIdx, 1); // prevent running again below
+  }
+
+  // Then run remaining extensions (ppt, excel, sharepoint, etc.)
   for (const output of OUTPUTS) {
     let extension;
     try {

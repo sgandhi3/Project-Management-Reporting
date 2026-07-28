@@ -506,6 +506,28 @@
   @keyframes pulse {
     0%,100% { opacity: 1; } 50% { opacity: 0.3; }
   }
+
+  /* ── AI terminal block ───────────────────────────────────────────────────── */
+  .term-ai-block {
+    background: rgba(37,99,235,.08);
+    border: 1px solid rgba(37,99,235,.2);
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin: 8px 0;
+    color: var(--text);
+    white-space: pre-wrap;
+    font-style: italic;
+    font-family: inherit;
+  }
+  .term-ai-header {
+    font-weight: 600;
+    font-style: normal;
+    color: #2563eb;
+    margin-bottom: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
 </style>
 
 <div class="sidebar">
@@ -641,6 +663,23 @@
     </div>
 
     <div class="card">
+      <div class="card-title">AI Context File</div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px;">
+        Upload a context file (CSV, TXT, XLSX, MD) to provide additional project notes for the AI summary.
+        The file is saved to the project root and reused on every run.
+      </p>
+      <div class="form-group" style="margin-bottom:12px;">
+        <label>Currently uploaded file</label>
+        <div id="ai-context-file-path" style="font-size:13px;color:var(--text-muted);padding:6px 0;">Loading...</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <input type="file" id="ai-context-file-input" accept=".csv,.txt,.xlsx,.md" style="font-size:13px;">
+        <button class="btn btn-secondary" onclick="uploadContextFile()">Upload</button>
+      </div>
+      <div id="ai-context-upload-msg" style="display:none;margin-top:10px;font-size:13px;color:var(--success);"></div>
+    </div>
+
+    <div class="card">
       <div class="card-title">SharePoint Upload</div>
       <div class="form-grid">
         <div class="form-group">
@@ -773,6 +812,10 @@
             <span><strong>ppt</strong> — PowerPoint report (requires a PPTX template)</span>
           </label>
           <label class="checkbox-item">
+            <input type="checkbox" id="fmt-excel" value="excel">
+            <span><strong>excel</strong> — Excel workbook (.xlsx) with Summary, By Workstream, Sub-Suites, Bug Analysis sheets</span>
+          </label>
+          <label class="checkbox-item">
             <input type="checkbox" id="fmt-ai-summary" value="ai-summary">
             <span><strong>ai-summary</strong> — AI-generated executive summary (requires ANTHROPIC_API_KEY)</span>
           </label>
@@ -807,6 +850,32 @@
           <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 8 * * *')">Daily 8am</button>
           <button class="btn btn-secondary" style="font-size:12px;padding:4px 10px;" onclick="setCron('0 9 * * 5')">Fri 9am</button>
         </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">AI Settings</div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-label">Save summary to file</div>
+          <div class="setting-desc">Write the generated AI summary to a .txt file in the project root</div>
+        </div>
+        <label class="toggle">
+          <input type="checkbox" id="ai-save-to-file" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="form-grid" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">
+        <div class="form-group" style="grid-column:1/-1">
+          <label>System Prompt <span style="font-weight:400;color:var(--text-muted)">(optional — overrides default)</span></label>
+          <textarea id="ai-system-prompt" rows="6" placeholder="Leave empty to use the built-in SIT status summary prompt..."></textarea>
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Additional Prompt Instructions <span style="font-weight:400;color:var(--text-muted)">(appended to data block)</span></label>
+          <textarea id="ai-prompt-suffix" rows="3" placeholder="e.g. Focus on blockers. Highlight any workstream behind schedule."></textarea>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+        <button class="btn btn-primary" onclick="saveAiSettings()">Save AI Settings</button>
       </div>
     </div>
   </div>
@@ -955,11 +1024,11 @@ function activateTab(tabId) {
 }
 
 async function loadTab(tabId) {
-  if (tabId === 'credentials') await loadCredentials();
+  if (tabId === 'credentials') { await loadCredentials(); await loadAiSettings(); }
   if (tabId === 'workstreams') await loadWorkstreams();
   if (tabId === 'queries')     await loadQueries();
   if (tabId === 'variables')   await loadVariables();
-  if (tabId === 'settings')    await loadSettings();
+  if (tabId === 'settings')    { await loadSettings(); await loadAiSettings(); }
   if (tabId === 'data')        { /* manual fetch via button */ }
 }
 
@@ -1267,6 +1336,7 @@ async function loadSettings() {
     document.getElementById('sett-fetchTestStats').checked = s.fetchTestStats !== false;
     const formats = s.outputFormats || ['ppt'];
     document.getElementById('fmt-ppt').checked          = formats.includes('ppt');
+    document.getElementById('fmt-excel').checked        = formats.includes('excel');
     document.getElementById('fmt-ai-summary').checked   = formats.includes('ai-summary');
     document.getElementById('fmt-sharepoint').checked   = formats.includes('sharepoint');
 
@@ -1285,6 +1355,7 @@ async function saveSettings() {
     const fetchTestStats = document.getElementById('sett-fetchTestStats').checked;
     const outputFormats  = [];
     if (document.getElementById('fmt-ppt').checked)        outputFormats.push('ppt');
+    if (document.getElementById('fmt-excel').checked)      outputFormats.push('excel');
     if (document.getElementById('fmt-ai-summary').checked) outputFormats.push('ai-summary');
     if (document.getElementById('fmt-sharepoint').checked) outputFormats.push('sharepoint');
 
@@ -1400,14 +1471,57 @@ function connectSSE() {
   const term = document.getElementById('terminal');
 
   sseSource = new EventSource('/api/run/stream');
+
+  // AI block buffering state
+  let aiBuffering  = false;
+  let aiLines      = [];
+  let aiBlockEl    = null;
+
   sseSource.onmessage = ev => {
     const line = JSON.parse(ev.data);
     if (term.querySelector('.terminal-placeholder')) term.innerHTML = '';
-    const div = document.createElement('div');
-    const ts  = new Date().toLocaleTimeString('en-US', { hour12: false });
 
+    const ts = new Date().toLocaleTimeString('en-US', { hour12: false });
+
+    // AI block start marker
+    if (line.trim() === '__AI_START__') {
+      aiBuffering = true;
+      aiLines     = [];
+      // Insert AI header + container
+      const header = document.createElement('div');
+      header.className = 'term-ai-header';
+      header.textContent = 'AI Summary';
+      term.appendChild(header);
+      aiBlockEl = document.createElement('div');
+      aiBlockEl.className = 'term-ai-block';
+      term.appendChild(aiBlockEl);
+      term.scrollTop = term.scrollHeight;
+      return;
+    }
+
+    // AI block end marker
+    if (line.trim() === '__AI_END__') {
+      aiBuffering = false;
+      if (aiBlockEl) {
+        aiBlockEl.textContent = aiLines.join('\n').trim();
+        aiBlockEl = null;
+      }
+      aiLines = [];
+      term.scrollTop = term.scrollHeight;
+      return;
+    }
+
+    // Buffer AI lines
+    if (aiBuffering) {
+      aiLines.push(line);
+      if (aiBlockEl) aiBlockEl.textContent = aiLines.join('\n').trimStart();
+      term.scrollTop = term.scrollHeight;
+      return;
+    }
+
+    // Normal terminal line
     const isExit = line.startsWith('[Process exited');
-    const isErr  = line.includes('Error') || line.includes('fatal') || line.includes('Failed');
+    const div = document.createElement('div');
     div.innerHTML = `<span class="line-ts">${ts}</span>${escHtml(line)}`;
     if (isExit) div.className = line.includes('code 0') ? 'term-exit-ok' : 'term-exit-err';
     term.appendChild(div);
@@ -2169,6 +2283,63 @@ function renderStructuredTables(data) {
   }
 
   return html || '<div style="color:var(--text-muted);font-size:13px;">No data returned.</div>';
+}
+
+// ── AI Settings ───────────────────────────────────────────────────────────────
+
+async function loadAiSettings() {
+  try {
+    const cfg = await api('GET', '/api/ai-config');
+    const spEl = document.getElementById('ai-system-prompt');
+    const sfEl = document.getElementById('ai-prompt-suffix');
+    const stEl = document.getElementById('ai-save-to-file');
+    const cfEl = document.getElementById('ai-context-file-path');
+    if (spEl) spEl.value = cfg.systemPrompt     || '';
+    if (sfEl) sfEl.value = cfg.userPromptSuffix || '';
+    if (stEl) stEl.checked = cfg.saveToFile !== false;
+    if (cfEl) cfEl.textContent = cfg.contextFile || '(none — using SUMMARY_NOTES_FILE env var if set)';
+  } catch (e) {
+    // non-fatal — AI config endpoint may not exist yet
+  }
+}
+
+async function saveAiSettings() {
+  try {
+    const systemPrompt     = document.getElementById('ai-system-prompt')?.value || '';
+    const userPromptSuffix = document.getElementById('ai-prompt-suffix')?.value || '';
+    const saveToFile       = document.getElementById('ai-save-to-file')?.checked !== false;
+    await api('PUT', '/api/ai-config', { systemPrompt, userPromptSuffix, saveToFile });
+    toast('AI settings saved');
+  } catch (e) {
+    toast('Save failed: ' + e.message, 'error');
+  }
+}
+
+async function uploadContextFile() {
+  const input = document.getElementById('ai-context-file-input');
+  const msg   = document.getElementById('ai-context-upload-msg');
+  if (!input || !input.files || !input.files[0]) {
+    toast('Please select a file first', 'error');
+    return;
+  }
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async e => {
+    try {
+      const base64  = e.target.result.split(',')[1];
+      const result  = await api('POST', '/api/upload/context', { filename: file.name, content: base64 });
+      if (msg) {
+        msg.style.display = 'block';
+        msg.textContent   = `Uploaded and saved to: ${result.path}`;
+      }
+      const cfEl = document.getElementById('ai-context-file-path');
+      if (cfEl) cfEl.textContent = result.path;
+      toast('Context file uploaded');
+    } catch (err) {
+      toast('Upload failed: ' + err.message, 'error');
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
