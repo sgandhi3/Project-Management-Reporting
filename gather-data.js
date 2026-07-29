@@ -12,9 +12,9 @@ const OUTPUTS = SETTINGS.outputFormats?.length
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sumStats(statsMap) {
-  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
   for (const s of Object.values(statsMap)) {
-    for (const k of Object.keys(totals)) totals[k] += s[k];
+    for (const k of Object.keys(totals)) totals[k] += (s[k] ?? 0);
   }
   return totals;
 }
@@ -72,7 +72,7 @@ async function collectAllData(provider) {
       console.log(`planned=${s.planned} executed=${s.executed} passed=${s.passed} failed=${s.failed}`);
     } catch (e) {
       console.log(`failed — ${e.message.split('\n')[0]}`);
-      data.stats[ws.name] = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+      data.stats[ws.name] = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
     }
 
     if (provider.fetchSubSuiteStats) {
@@ -112,7 +112,8 @@ async function collectAllData(provider) {
     + '\n  Passed:      ' + data.consolidatedData.passed
     + '\n  Failed:      ' + data.consolidatedData.failed
     + '\n  Not Started: ' + data.consolidatedData.notStarted
-    + '\n  In Progress: ' + data.consolidatedData.inProgress + '\n');
+    + '\n  In Progress: ' + data.consolidatedData.inProgress
+    + '\n  Blocked:     ' + data.consolidatedData.blocked + '\n');
 
   // ── Auto-total for every per-workstream query (d.bugsTotal, etc.) ─────────────
   for (const q of wsQueries) {
@@ -152,20 +153,20 @@ function printDataSnapshot(data) {
   console.log('\n d.stats  (test execution per workstream)\n');
   const statsRows = Object.entries(data.stats).map(([ws, s]) => ({
     workstream: ws, planned: s.planned, executed: s.executed,
-    passed: s.passed, failed: s.failed, notStarted: s.notStarted, inProgress: s.inProgress,
+    passed: s.passed, failed: s.failed, notStarted: s.notStarted, inProgress: s.inProgress, blocked: s.blocked ?? 0,
   }));
   console.table(statsRows);
 
   const c = data.consolidatedData;
   console.log(' d.consolidatedData  (all workstreams combined)');
-  console.table([{ planned: c.planned, executed: c.executed, passed: c.passed, failed: c.failed, notStarted: c.notStarted, inProgress: c.inProgress }]);
+  console.table([{ planned: c.planned, executed: c.executed, passed: c.passed, failed: c.failed, notStarted: c.notStarted, inProgress: c.inProgress, blocked: c.blocked ?? 0 }]);
 
   const subStatEntries = Object.entries(data.subStats).filter(([, v]) => Object.keys(v).length > 0);
   if (subStatEntries.length) {
     console.log(' d.subStats  (per-workstream sub-suite breakdown)\n');
     for (const [wsName, suites] of subStatEntries) {
       console.log(`  ${wsName}:`);
-      const rows = Object.entries(suites).map(([suite, s]) => ({ suite, planned: s.planned, executed: s.executed, passed: s.passed, failed: s.failed }));
+      const rows = Object.entries(suites).map(([suite, s]) => ({ suite, planned: s.planned, executed: s.executed, passed: s.passed, failed: s.failed, blocked: s.blocked ?? 0 }));
       console.table(rows);
     }
   }

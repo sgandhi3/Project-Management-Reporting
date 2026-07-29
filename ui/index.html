@@ -1752,7 +1752,7 @@ async function autoGenerateMappings() {
       return s.replace(/[^A-Z0-9]/gi, '').toUpperCase().slice(0, 4);
     }
 
-    const STAT_SFX = { planned:'TTC', executed:'ETC', passed:'PTC', failed:'FTC', notStarted:'NSTC', inProgress:'IPTC' };
+    const STAT_SFX = { planned:'TTC', executed:'ETC', passed:'PTC', failed:'FTC', notStarted:'NSTC', inProgress:'IPTC', blocked:'BTC' };
     const STAT_DEFS = [
       { key: 'planned',    label: 'Total Test Cases' },
       { key: 'executed',   label: 'Executed'          },
@@ -1760,6 +1760,7 @@ async function autoGenerateMappings() {
       { key: 'failed',     label: 'Failed'            },
       { key: 'notStarted', label: 'Not Started'       },
       { key: 'inProgress', label: 'In Progress'       },
+      { key: 'blocked',    label: 'Blocked'           },
     ];
 
     // ── Per-workstream stats ──────────────────────────────────────────────────
@@ -2008,8 +2009,9 @@ function statCard(label, s) {
       <div><span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Passed</span>${statBar(s.passed, s.planned, passColor)}</div>
       <div><span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Failed</span>${statBar(s.failed, s.planned, failColor)}</div>
       <div><span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">In Progress</span>${statBar(s.inProgress, s.planned, progColor)}</div>
+      ${(s.blocked ?? 0) > 0 ? `<div><span style="font-size:11px;color:var(--text-muted);display:block;margin-bottom:2px;">Blocked</span>${statBar(s.blocked, s.planned, '#e6850f')}</div>` : ''}
       <div style="margin-top:4px;padding-top:6px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);">
-        Executed: ${s.executed} &nbsp;·&nbsp; Not started: ${s.notStarted}
+        Executed: ${s.executed} &nbsp;·&nbsp; Not started: ${s.notStarted}${(s.blocked ?? 0) > 0 ? ` &nbsp;·&nbsp; Blocked: ${s.blocked}` : ''}
       </div>
     </div>
   </div>`;
@@ -2120,7 +2122,7 @@ function renderDataPreview(data) {
 
 // ── Structured table renderer ─────────────────────────────────────────────────
 
-const STATS_KEYS = ['planned','executed','passed','failed','notStarted','inProgress'];
+const STATS_KEYS = ['planned','executed','passed','failed','notStarted','inProgress','blocked'];
 const TH_STYLE   = 'text-align:left;padding:8px 12px;font-size:12px;font-weight:600;white-space:nowrap;';
 const TD_STYLE   = 'padding:8px 12px;font-size:13px;';
 const SKIP_KEYS  = new Set(['_generatedFiles']);
@@ -2169,7 +2171,7 @@ function numCell(n, total, highlight) {
 }
 
 function renderStatsRows(map, rowLabelKey) {
-  const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e' };
+  const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e', blocked:'#e6850f' };
   return Object.entries(map).map(([label, s]) => {
     const cells = STATS_KEYS.map(k =>
       k === 'planned'
@@ -2242,7 +2244,7 @@ function renderStructuredTables(data) {
           const depth  = (suitePath.match(/ \/ /g) || []).length;
           const label  = suitePath.split(' / ').pop();
           const indent = depth * 20;
-          const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e' };
+          const COLORS = { passed:'#38a169', failed:'#e53e3e', executed:'var(--accent)', notStarted:'#a0aec0', inProgress:'#d69e2e', blocked:'#e6850f' };
           const cells  = STATS_KEYS.map(k =>
             k === 'planned'
               ? `<td style="${TD_STYLE}font-weight:600;">${s[k]??0}</td>`

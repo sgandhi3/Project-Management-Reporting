@@ -64,28 +64,29 @@ async function fetchSuiteTestPoints(planId, suiteId) {
 }
 
 function tallyOutcomes(points) {
-  let planned = 0, executed = 0, passed = 0, failed = 0, notStarted = 0, inProgress = 0;
+  let planned = 0, executed = 0, passed = 0, failed = 0, notStarted = 0, inProgress = 0, blocked = 0;
   for (const pt of points) {
     planned++;
     const o = (pt.results?.outcome || '').toLowerCase();
     if      (o === 'passed')                            { passed++;     executed++; }
     else if (o === 'failed')                            { failed++;     executed++; }
+    else if (o === 'blocked')                           { blocked++; }
     else if (o === 'inprogress')                        { inProgress++; executed++; }
     else if (o && o !== 'none' && o !== 'unspecified')  { executed++; }
     else                                                { notStarted++; }
   }
-  return { planned, executed, passed, failed, notStarted, inProgress };
+  return { planned, executed, passed, failed, notStarted, inProgress, blocked };
 }
 
 export async function fetchTestStats({ name, planId, sitSuiteId }) {
   if (!planId || !sitSuiteId) {
     console.warn(`  ⚠  ${name}: missing planId or sitSuiteId`);
-    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
   }
   const allSuites = await fetchPlanSuites(planId);
   const suiteIds  = collectSuiteDescendants(Number(sitSuiteId), allSuites);
   console.log(`    → ${name}: ${suiteIds.length} suite(s) under ${sitSuiteId}`);
-  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
   for (const sid of suiteIds) {
     const t = tallyOutcomes(await fetchSuiteTestPoints(planId, sid));
     for (const k of Object.keys(totals)) totals[k] += t[k];
@@ -122,7 +123,7 @@ export async function fetchSubSuiteStats({ name, planId, sitSuiteId }) {
 
     // Roll up all descendants of this suite into its stats
     const descendantIds = collectSuiteDescendants(suiteId, allSuites);
-    const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0 };
+    const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
     for (const sid of descendantIds) {
       const t = tallyOutcomes(await fetchSuiteTestPoints(planId, sid));
       for (const k of Object.keys(totals)) totals[k] += t[k];

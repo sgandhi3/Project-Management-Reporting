@@ -84,14 +84,14 @@ function formatDataForPrompt(data) {
   // Per-workstream execution table
   lines.push('TEST EXECUTION STATUS');
   lines.push('─'.repeat(60));
-  lines.push('Workstream | Planned | Executed | Passed | Failed | Not Started | In Progress');
+  lines.push('Workstream | Planned | Executed | Passed | Failed | Not Started | In Progress | Blocked');
   for (const [ws, s] of Object.entries(data.stats)) {
     const pct = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
-    lines.push(`${ws} | ${s.planned} | ${s.executed} | ${s.passed} | ${s.failed} | ${s.notStarted} | ${s.inProgress} (${pct}% pass rate)`);
+    lines.push(`${ws} | ${s.planned} | ${s.executed} | ${s.passed} | ${s.failed} | ${s.notStarted} | ${s.inProgress} | ${s.blocked ?? 0} (${pct}% pass rate)`);
   }
   const c = data.consolidatedData;
   const totalPct = c.executed ? Math.round((c.passed / c.executed) * 100) : 0;
-  lines.push(`TOTAL | ${c.planned} | ${c.executed} | ${c.passed} | ${c.failed} | ${c.notStarted} | ${c.inProgress} (${totalPct}% pass rate)`);
+  lines.push(`TOTAL | ${c.planned} | ${c.executed} | ${c.passed} | ${c.failed} | ${c.notStarted} | ${c.inProgress} | ${c.blocked ?? 0} (${totalPct}% pass rate)`);
   lines.push('');
 
   // Bug summary — finds any top-level key containing "bug" that's an object (groupBy results)

@@ -153,26 +153,28 @@ function populateWorkstreamSheet(wb, data) {
   clearDataRows(ws);
 
   const entries = Object.entries(data.stats);
-  let totalPlan = 0, totalExec = 0, totalPass = 0, totalFail = 0, totalNS = 0, totalIP = 0;
+  let totalPlan = 0, totalExec = 0, totalPass = 0, totalFail = 0, totalNS = 0, totalIP = 0, totalBlocked = 0;
 
   entries.forEach(([wsName, s], idx) => {
-    const row    = ws.getRow(idx + 2);
-    const passP  = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
+    const row     = ws.getRow(idx + 2);
+    const passP   = s.executed ? Math.round((s.passed / s.executed) * 100) : 0;
     const rowFill = idx % 2 === 0 ? ALT : null;
+    const blocked = s.blocked ?? 0;
 
-    setDataCell(row.getCell(1), wsName,        { fillArgb: rowFill });
-    setDataCell(row.getCell(2), s.planned,     { fillArgb: rowFill,                         align: 'center' });
-    setDataCell(row.getCell(3), s.executed,    { fillArgb: rowFill,                         align: 'center' });
-    setDataCell(row.getCell(4), s.passed,      { fillArgb: s.passed > 0 ? GREEN : rowFill,  align: 'center' });
-    setDataCell(row.getCell(5), s.failed,      { fillArgb: s.failed > 0 ? RED   : rowFill,  align: 'center' });
-    setDataCell(row.getCell(6), s.notStarted,  { fillArgb: rowFill,                         align: 'center' });
-    setDataCell(row.getCell(7), s.inProgress,  { fillArgb: rowFill,                         align: 'center' });
+    setDataCell(row.getCell(1), wsName,       { fillArgb: rowFill });
+    setDataCell(row.getCell(2), s.planned,    { fillArgb: rowFill,                        align: 'center' });
+    setDataCell(row.getCell(3), s.executed,   { fillArgb: rowFill,                        align: 'center' });
+    setDataCell(row.getCell(4), s.passed,     { fillArgb: s.passed  > 0 ? GREEN : rowFill, align: 'center' });
+    setDataCell(row.getCell(5), s.failed,     { fillArgb: s.failed  > 0 ? RED   : rowFill, align: 'center' });
+    setDataCell(row.getCell(6), s.notStarted, { fillArgb: rowFill,                        align: 'center' });
+    setDataCell(row.getCell(7), s.inProgress, { fillArgb: rowFill,                        align: 'center' });
+    setDataCell(row.getCell(8), blocked,      { fillArgb: blocked   > 0 ? YELLOW : rowFill, align: 'center' });
     const pf = passP >= 80 ? GREEN : passP >= 60 ? YELLOW : RED;
-    setDataCell(row.getCell(8), `${passP}%`,   { fillArgb: pf, align: 'center' });
+    setDataCell(row.getCell(9), `${passP}%`,  { fillArgb: pf, align: 'center' });
 
     totalPlan += s.planned; totalExec += s.executed;
     totalPass += s.passed;  totalFail += s.failed;
-    totalNS   += s.notStarted; totalIP += s.inProgress;
+    totalNS   += s.notStarted; totalIP += s.inProgress; totalBlocked += blocked;
   });
 
   // Total row
@@ -180,7 +182,8 @@ function populateWorkstreamSheet(wb, data) {
   const totalPassP  = totalExec ? Math.round((totalPass / totalExec) * 100) : 0;
   const totalRow    = ws.getRow(totalRowIdx);
   [['TOTAL', null], [totalPlan, null], [totalExec, null], [totalPass, GREEN], [totalFail, RED],
-   [totalNS, null], [totalIP, null], [`${totalPassP}%`, totalPassP >= 80 ? GREEN : totalPassP >= 60 ? YELLOW : RED]]
+   [totalNS, null], [totalIP, null], [totalBlocked, totalBlocked > 0 ? YELLOW : null],
+   [`${totalPassP}%`, totalPassP >= 80 ? GREEN : totalPassP >= 60 ? YELLOW : RED]]
     .forEach(([v, f], i) => {
       const cell = totalRow.getCell(i + 1);
       setDataCell(cell, v, { bold: true, fillArgb: f || HFILL, align: i === 0 ? 'left' : 'center' });
@@ -222,15 +225,17 @@ function populateSubSuitesSheet(wb, data) {
       const rowFill = altCount % 2 === 0 ? ALT : null;
       const row    = ws.getRow(rowIdx);
 
-      setDataCell(row.getCell(1), label,       { bold: depth === 0, fillArgb: rowFill });
-      setDataCell(row.getCell(2), s.planned,   { fillArgb: rowFill, align: 'center' });
-      setDataCell(row.getCell(3), s.executed,  { fillArgb: rowFill, align: 'center' });
-      setDataCell(row.getCell(4), s.passed,    { fillArgb: s.passed > 0 ? GREEN : rowFill, align: 'center' });
-      setDataCell(row.getCell(5), s.failed,    { fillArgb: s.failed > 0 ? RED   : rowFill, align: 'center' });
-      setDataCell(row.getCell(6), s.notStarted,{ fillArgb: rowFill, align: 'center' });
-      setDataCell(row.getCell(7), s.inProgress,{ fillArgb: rowFill, align: 'center' });
+      const blocked = s.blocked ?? 0;
+      setDataCell(row.getCell(1), label,        { bold: depth === 0, fillArgb: rowFill });
+      setDataCell(row.getCell(2), s.planned,    { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(3), s.executed,   { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(4), s.passed,     { fillArgb: s.passed  > 0 ? GREEN  : rowFill, align: 'center' });
+      setDataCell(row.getCell(5), s.failed,     { fillArgb: s.failed  > 0 ? RED    : rowFill, align: 'center' });
+      setDataCell(row.getCell(6), s.notStarted, { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(7), s.inProgress, { fillArgb: rowFill, align: 'center' });
+      setDataCell(row.getCell(8), blocked,      { fillArgb: blocked   > 0 ? YELLOW : rowFill, align: 'center' });
       const pf = passP >= 80 ? GREEN : passP >= 60 ? YELLOW : RED;
-      setDataCell(row.getCell(8), `${passP}%`, { fillArgb: pf, align: 'center' });
+      setDataCell(row.getCell(9), `${passP}%`,  { fillArgb: pf, align: 'center' });
 
       altCount++;
       rowIdx++;

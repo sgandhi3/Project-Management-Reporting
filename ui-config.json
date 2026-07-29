@@ -1304,6 +1304,261 @@
       "token": "BPRIP4",
       "path": "d.bugsByPriority[4]",
       "description": "Open bugs by priority: 4"
+    },
+    {
+      "token": "PDMIT2IT21CPCTTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT21CPCETC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — Executed"
+    },
+    {
+      "token": "PDMIT2IT21CPCPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — Passed"
+    },
+    {
+      "token": "PDMIT2IT21CPCFTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — Failed"
+    },
+    {
+      "token": "PDMIT2IT21CPCNSTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — Not Started"
+    },
+    {
+      "token": "PDMIT2IT21CPCIPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac — In Progress"
+    },
+    {
+      "token": "PDMIT2IT21CPCTTC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT21CPCETC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — Executed"
+    },
+    {
+      "token": "PDMIT2IT21CPCPTC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — Passed"
+    },
+    {
+      "token": "PDMIT2IT21CPCFTC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — Failed"
+    },
+    {
+      "token": "PDMIT2IT21CPCNSTC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — Not Started"
+    },
+    {
+      "token": "PDMIT2IT21CPCIPTC_1",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Org — In Progress"
+    },
+    {
+      "token": "PDMIT2IT21CPCTTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT21CPCETC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — Executed"
+    },
+    {
+      "token": "PDMIT2IT21CPCPTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — Passed"
+    },
+    {
+      "token": "PDMIT2IT21CPCFTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — Failed"
+    },
+    {
+      "token": "PDMIT2IT21CPCNSTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — Not Started"
+    },
+    {
+      "token": "PDMIT2IT21CPCIPTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.1 / CPIMS / CPIMS-Prac Role — In Progress"
+    },
+    {
+      "token": "PDMIT2IT20CPCTTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT20CPCETC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — Executed"
+    },
+    {
+      "token": "PDMIT2IT20CPCPTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — Passed"
+    },
+    {
+      "token": "PDMIT2IT20CPCFTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — Failed"
+    },
+    {
+      "token": "PDMIT2IT20CPCNSTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — Not Started"
+    },
+    {
+      "token": "PDMIT2IT20CPCIPTC_2",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / CPIMS / CPIMS-Prac Role — In Progress"
+    },
+    {
+      "token": "PDMIT2IT20ROTTTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT20ROTETC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — Executed"
+    },
+    {
+      "token": "PDMIT2IT20ROTPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — Passed"
+    },
+    {
+      "token": "PDMIT2IT20ROTFTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — Failed"
+    },
+    {
+      "token": "PDMIT2IT20ROTNSTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — Not Started"
+    },
+    {
+      "token": "PDMIT2IT20ROTIPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Toledo Clinic — In Progress"
+    },
+    {
+      "token": "PDMIT2IT20ROKTTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].planned",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — Total Test Cases"
+    },
+    {
+      "token": "PDMIT2IT20ROKETC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].executed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — Executed"
+    },
+    {
+      "token": "PDMIT2IT20ROKPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].passed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — Passed"
+    },
+    {
+      "token": "PDMIT2IT20ROKFTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].failed",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — Failed"
+    },
+    {
+      "token": "PDMIT2IT20ROKNSTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].notStarted",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — Not Started"
+    },
+    {
+      "token": "PDMIT2IT20ROKIPTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0 / Rosters / Kettering'].inProgress",
+      "description": "PDM / Iteration 2 / Iteration 2.0 / Rosters / Kettering — In Progress"
+    },
+    {
+      "token": "PDMIT2IT21BTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.1'].blocked",
+      "description": "PDM Iteration 2 / Iteration 2.1 -Blocked"
+    },
+    {
+      "token": "PDMIT2IT20BTC",
+      "path": "d.subStats.PDM['Iteration 2 / Iteration 2.0'].blocked",
+      "description": "PDM / Iteration 2 / Iteration 2.0 - Blocked "
+    },
+    {
+      "token": "BENEBTC",
+      "path": "d.stats.Benefits.blocked",
+      "description": "Benefits - Blocked Test Case"
+    },
+    {
+      "token": "ENROBTC",
+      "path": "d.stats.Enrollment.blocked",
+      "description": "Enrollment - Blocked Test Case"
+    },
+    {
+      "token": "EDIBTC",
+      "path": "d.stats.EDI.blocked",
+      "description": "EDI - Blocked Test Cases"
+    },
+    {
+      "token": "PDMIT2IT20PP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0']?.executed ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.0'].passed / d.subStats.PDM['Iteration 2 / Iteration 2.0'].executed) * 100) : 0",
+      "description": "PDM 2.0 — Pass %"
+    },
+    {
+      "token": "PDMIT2IT20FP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0']?.executed ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.0'].failed / d.subStats.PDM['Iteration 2 / Iteration 2.0'].executed) * 100) : 0",
+      "description": "PDM 2.0 — Fail %"
+    },
+    {
+      "token": "PDMIT2IT21PP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1']?.executed ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.1'].passed / d.subStats.PDM['Iteration 2 / Iteration 2.1'].executed) * 100) : 0",
+      "description": "PDM 2.1 — Pass %"
+    },
+    {
+      "token": "PDMIT2IT21FP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1']?.executed ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.1'].failed / d.subStats.PDM['Iteration 2 / Iteration 2.1'].executed) * 100) : 0",
+      "description": "PDM 2.1 — Fail %"
+    },
+    {
+      "token": "BENEPP",
+      "path": "d.stats.Benefits.executed ? Math.round((d.stats.Benefits.passed / d.stats.Benefits.executed) * 100) : 0",
+      "description": "Benefits — Pass %"
+    },
+    {
+      "token": "BENEFP",
+      "path": "d.stats.Benefits.executed ? Math.round((d.stats.Benefits.failed / d.stats.Benefits.executed) * 100) : 0",
+      "description": "Benefits — Fail %"
+    },
+    {
+      "token": "ENROPP",
+      "path": "d.stats.Enrollment.executed ? Math.round((d.stats.Enrollment.passed / d.stats.Enrollment.executed) * 100) : 0",
+      "description": "Enrollment — Pass %"
+    },
+    {
+      "token": "ENROFP",
+      "path": "d.stats.Enrollment.executed ? Math.round((d.stats.Enrollment.failed / d.stats.Enrollment.executed) * 100) : 0",
+      "description": "Enrollment — Fail %"
+    },
+    {
+      "token": "EDIPP",
+      "path": "d.stats.EDI.executed ? Math.round((d.stats.EDI.passed / d.stats.EDI.executed) * 100) : 0",
+      "description": "EDI — Pass %"
+    },
+    {
+      "token": "EDIFP",
+      "path": "d.stats.EDI.executed ? Math.round((d.stats.EDI.failed / d.stats.EDI.executed) * 100) : 0",
+      "description": "EDI — Fail %"
     }
   ],
   "queries": [

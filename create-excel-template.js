@@ -161,50 +161,50 @@ function buildSummary(wb) {
 
 function buildByWorkstream(wb) {
   const ws = wb.addWorksheet('By Workstream');
-  widths(ws, [22, 12, 12, 12, 12, 14, 14, 12]);
+  widths(ws, [22, 12, 12, 12, 12, 14, 14, 12, 12]);
   freeze(ws);
 
-  const headers = ['Workstream', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Pass %'];
+  const headers = ['Workstream', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Blocked', 'Pass %'];
   headers.forEach((h, i) => headerCell(ws.getCell(1, i + 1), h));
   ws.getRow(1).height = 22;
-  ws.autoFilter = { from: 'A1', to: 'H1' };
+  ws.autoFilter = { from: 'A1', to: 'I1' };
 
-  // Demo data rows (replaced by extension at run time)
+  // Demo data rows (replaced by extension at run time): name, planned, executed, passed, failed, notStarted, inProgress, blocked
   const demo = [
-    ['PDM',        120, 95, 80, 15, 25, 0],
-    ['Benefits',    85, 70, 65,  5, 15, 0],
-    ['Enrollment', 100, 88, 75, 13, 12, 0],
-    ['EDI',         60, 45, 40,  5, 15, 0],
+    ['PDM',        120, 95, 80, 15, 20, 0, 5],
+    ['Benefits',    85, 70, 65,  5, 15, 0, 0],
+    ['Enrollment', 100, 88, 75, 13, 12, 0, 0],
+    ['EDI',         60, 45, 40,  5, 13, 0, 2],
   ];
 
-  demo.forEach(([ws_name, pl, ex, pa, fa, ns, ip], idx) => {
-    const row = ws.getRow(idx + 2);
-    const passP = ex ? Math.round((pa / ex) * 100) : 0;
+  demo.forEach(([ws_name, pl, ex, pa, fa, ns, ip, bl], idx) => {
+    const row     = ws.getRow(idx + 2);
+    const passP   = ex ? Math.round((pa / ex) * 100) : 0;
     const rowFill = idx % 2 === 0 ? ALT_ROW : null;
 
     dataCell(row.getCell(1), ws_name, { fillArgb: rowFill });
     dataCell(row.getCell(2), pl,      { fillArgb: rowFill, align: 'center' });
     dataCell(row.getCell(3), ex,      { fillArgb: rowFill, align: 'center' });
-    dataCell(row.getCell(4), pa,      { fillArgb: pa > 0 ? GREEN_FILL : rowFill, align: 'center' });
-    dataCell(row.getCell(5), fa,      { fillArgb: fa > 0 ? RED_FILL   : rowFill, align: 'center' });
+    dataCell(row.getCell(4), pa,      { fillArgb: pa > 0 ? GREEN_FILL  : rowFill, align: 'center' });
+    dataCell(row.getCell(5), fa,      { fillArgb: fa > 0 ? RED_FILL    : rowFill, align: 'center' });
     dataCell(row.getCell(6), ns,      { fillArgb: rowFill, align: 'center' });
     dataCell(row.getCell(7), ip,      { fillArgb: rowFill, align: 'center' });
+    dataCell(row.getCell(8), bl,      { fillArgb: bl > 0 ? YELLOW_FILL : rowFill, align: 'center' });
     const passFill = passP >= 80 ? GREEN_FILL : passP >= 60 ? YELLOW_FILL : RED_FILL;
-    dataCell(row.getCell(8), `${passP}%`, { fillArgb: passFill, align: 'center' });
+    dataCell(row.getCell(9), `${passP}%`, { fillArgb: passFill, align: 'center' });
   });
 
   // Total row
   const totalRow = ws.getRow(6);
-  const totals   = ['TOTAL', 365, 298, 260, 38, 67, 0];
-  totals.forEach((v, i) => {
+  ['TOTAL', 365, 298, 260, 38, 60, 0, 7].forEach((v, i) => {
     const cell = totalRow.getCell(i + 1);
-    cell.value  = i === 0 ? v : v;
-    cell.font   = font(true, 11);
-    cell.fill   = fill(HEADER_FILL);
+    cell.value = v;
+    cell.font  = font(true, 11);
+    cell.fill  = fill(HEADER_FILL);
     cell.border = border();
     cell.alignment = { horizontal: i === 0 ? 'left' : 'center' };
   });
-  const totalPassCell = totalRow.getCell(8);
+  const totalPassCell = totalRow.getCell(9);
   totalPassCell.value = '87%';
   totalPassCell.font  = font(true, 11);
   totalPassCell.fill  = fill(GREEN_FILL);
@@ -214,61 +214,62 @@ function buildByWorkstream(wb) {
   // Guide note below
   ws.getRow(8).getCell(1).value = '↑ Add charts referencing rows 2:5 of this sheet. The extension overwrites this data on each run.';
   ws.getRow(8).getCell(1).font  = { name: 'Calibri', size: 10, italic: true, color: { argb: MUTED } };
-  ws.mergeCells('A8:H8');
+  ws.mergeCells('A8:I8');
 }
 
 // ─── Sheet 3: Sub-Suites ──────────────────────────────────────────────────────
 
 function buildSubSuites(wb) {
   const ws = wb.addWorksheet('Sub-Suites');
-  widths(ws, [40, 12, 12, 12, 12, 14, 14, 12]);
+  widths(ws, [40, 12, 12, 12, 12, 14, 14, 12, 12]);
   freeze(ws);
 
-  const headers = ['Suite', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Pass %'];
+  const headers = ['Suite', 'Planned', 'Executed', 'Passed', 'Failed', 'Not Started', 'In Progress', 'Blocked', 'Pass %'];
   headers.forEach((h, i) => headerCell(ws.getCell(1, i + 1), h));
   ws.getRow(1).height = 22;
-  ws.autoFilter = { from: 'A1', to: 'H1' };
+  ws.autoFilter = { from: 'A1', to: 'I1' };
 
   // Demo workstream group + sub-suite rows
   const demoData = [
     { group: 'PDM', suites: [
-      { name: 'Iteration 2',                     depth: 0, pl: 120, ex: 95, pa: 80, fa: 15, ns: 25, ip: 0 },
-      { name: '  Iteration 2.1',                 depth: 1, pl:  60, ex: 48, pa: 42, fa:  6, ns: 12, ip: 0 },
-      { name: '    CPIMs',                       depth: 2, pl:  30, ex: 24, pa: 22, fa:  2, ns:  6, ip: 0 },
-      { name: '      Phase 1',                   depth: 3, pl:  15, ex: 12, pa: 11, fa:  1, ns:  3, ip: 0 },
+      { name: 'Iteration 2',    pl: 120, ex: 95, pa: 80, fa: 15, ns: 20, ip: 0, bl: 5 },
+      { name: '  Iteration 2.1',pl:  60, ex: 48, pa: 42, fa:  6, ns: 10, ip: 0, bl: 2 },
+      { name: '    CPIMs',      pl:  30, ex: 24, pa: 22, fa:  2, ns:  5, ip: 0, bl: 1 },
+      { name: '      Phase 1',  pl:  15, ex: 12, pa: 11, fa:  1, ns:  2, ip: 0, bl: 1 },
     ]},
   ];
 
   let rowIdx = 2;
   for (const { group, suites } of demoData) {
-    const gRow = ws.getRow(rowIdx);
+    const gRow  = ws.getRow(rowIdx);
     const gCell = gRow.getCell(1);
     gCell.value = group;
     gCell.font  = font(true, 12, WHITE);
     gCell.fill  = fill(ACCENT);
-    ws.mergeCells(`A${rowIdx}:H${rowIdx}`);
+    ws.mergeCells(`A${rowIdx}:I${rowIdx}`);
     rowIdx++;
 
-    suites.forEach(({ name, pl, ex, pa, fa, ns, ip }, idx) => {
-      const row    = ws.getRow(rowIdx);
-      const passP  = ex ? Math.round((pa / ex) * 100) : 0;
+    suites.forEach(({ name, pl, ex, pa, fa, ns, ip, bl }, idx) => {
+      const row     = ws.getRow(rowIdx);
+      const passP   = ex ? Math.round((pa / ex) * 100) : 0;
       const rowFill = idx % 2 === 0 ? ALT_ROW : null;
       dataCell(row.getCell(1), name, { fillArgb: rowFill });
       dataCell(row.getCell(2), pl,   { fillArgb: rowFill, align: 'center' });
       dataCell(row.getCell(3), ex,   { fillArgb: rowFill, align: 'center' });
-      dataCell(row.getCell(4), pa,   { fillArgb: pa > 0 ? GREEN_FILL : rowFill, align: 'center' });
-      dataCell(row.getCell(5), fa,   { fillArgb: fa > 0 ? RED_FILL   : rowFill, align: 'center' });
+      dataCell(row.getCell(4), pa,   { fillArgb: pa > 0 ? GREEN_FILL  : rowFill, align: 'center' });
+      dataCell(row.getCell(5), fa,   { fillArgb: fa > 0 ? RED_FILL    : rowFill, align: 'center' });
       dataCell(row.getCell(6), ns,   { fillArgb: rowFill, align: 'center' });
       dataCell(row.getCell(7), ip,   { fillArgb: rowFill, align: 'center' });
+      dataCell(row.getCell(8), bl,   { fillArgb: bl > 0 ? YELLOW_FILL : rowFill, align: 'center' });
       const pf = passP >= 80 ? GREEN_FILL : passP >= 60 ? YELLOW_FILL : RED_FILL;
-      dataCell(row.getCell(8), `${passP}%`, { fillArgb: pf, align: 'center' });
+      dataCell(row.getCell(9), `${passP}%`, { fillArgb: pf, align: 'center' });
       rowIdx++;
     });
   }
 
   ws.getRow(rowIdx + 1).getCell(1).value = '↑ The extension replaces this data on each run, grouped by workstream.';
   ws.getRow(rowIdx + 1).getCell(1).font  = { name: 'Calibri', size: 10, italic: true, color: { argb: MUTED } };
-  ws.mergeCells(`A${rowIdx + 1}:H${rowIdx + 1}`);
+  ws.mergeCells(`A${rowIdx + 1}:I${rowIdx + 1}`);
 }
 
 // ─── Sheet 4: Bug Analysis ────────────────────────────────────────────────────
@@ -342,8 +343,8 @@ function buildChartsGuide(wb) {
     '',
     'Sheet "By Workstream":',
     '  1. Select A1:H5 (headers + 4 workstream rows)',
-    '  2. Insert → Charts → Clustered Bar (shows Planned/Executed/Passed/Failed side by side)',
-    '  3. Or select A1:A5 + H1:H5 for a Pass Rate bar chart per workstream',
+    '  2. Insert → Charts → Clustered Bar (shows Planned/Executed/Passed/Failed/Blocked side by side)',
+    '  3. Or select A1:A5 + I1:I5 for a Pass Rate bar chart per workstream',
     '',
     'Sheet "Sub-Suites":',
     '  1. Select the rows for one workstream block',
