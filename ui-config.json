@@ -2,8 +2,7 @@
   "settings": {
     "fetchTestStats": true,
     "outputFormats": [
-      "ppt",
-      "excel"
+      "ppt"
     ],
     "schedule": {
       "enabled": false,
@@ -1559,6 +1558,76 @@
       "token": "EDIFP",
       "path": "d.stats.EDI.executed ? Math.round((d.stats.EDI.failed / d.stats.EDI.executed) * 100) : 0",
       "description": "EDI — Fail %"
+    },
+    {
+      "token": "PDMIT2IT20EP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0']?.planned ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.0'].executed / d.subStats.PDM['Iteration 2 / Iteration 2.0'].planned) * 100) : 0",
+      "description": "PDM 2.0 — Execution %"
+    },
+    {
+      "token": "PDMIT2IT21EP",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1']?.planned ? Math.round((d.subStats.PDM['Iteration 2 / Iteration 2.1'].executed / d.subStats.PDM['Iteration 2 / Iteration 2.1'].planned) * 100) : 0",
+      "description": "PDM 2.1 — Execution %"
+    },
+    {
+      "token": "BENEEP",
+      "path": "d.stats.Benefits.planned ? Math.round((d.stats.Benefits.executed / d.stats.Benefits.planned) * 100) : 0",
+      "description": "Benefits — Execution %"
+    },
+    {
+      "token": "ENROEP",
+      "path": "d.stats.Enrollment.planned ? Math.round((d.stats.Enrollment.executed / d.stats.Enrollment.planned) * 100) : 0",
+      "description": "Enrollment — Execution %"
+    },
+    {
+      "token": "EDIEP",
+      "path": "d.stats.EDI.planned ? Math.round((d.stats.EDI.executed / d.stats.EDI.planned) * 100) : 0",
+      "description": "EDI — Execution %"
+    },
+    {
+      "token": "PDMIT2IT20CPBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0 / CPIMS']?.blocked ?? 0",
+      "description": "PDM 2.0 / CPIMS — Blocked"
+    },
+    {
+      "token": "PDMIT2IT20ROBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0 / Rosters']?.blocked ?? 0",
+      "description": "PDM 2.0 / Rosters — Blocked"
+    },
+    {
+      "token": "PDMIT2IT20ANBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.0 / Ancilliary']?.blocked ?? 0",
+      "description": "PDM 2.0 / Ancillary — Blocked"
+    },
+    {
+      "token": "PDMIT2IT21CPBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1 / CPIMS']?.blocked ?? 0",
+      "description": "PDM 2.1 / CPIMS — Blocked"
+    },
+    {
+      "token": "PDMIT2IT21ROBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1 / Rosters']?.blocked ?? 0",
+      "description": "PDM 2.1 / Rosters — Blocked"
+    },
+    {
+      "token": "PDMIT2IT21ANBTC",
+      "path": "d.subStats.PDM?.['Iteration 2 / Iteration 2.1 / Ancillary']?.blocked ?? 0",
+      "description": "PDM 2.1 / Ancillary — Blocked"
+    },
+    {
+      "token": "BENESIHMBTC",
+      "path": "d.subStats.Benefits?.['Signature HMO']?.blocked ?? 0",
+      "description": "Benefits / Signature HMO — Blocked"
+    },
+    {
+      "token": "BENEACPPBTC",
+      "path": "d.subStats.Benefits?.['Access PPO (Premium PPO INN)']?.blocked ?? 0",
+      "description": "Benefits / Access PPO (Premium PPO INN) — Blocked"
+    },
+    {
+      "token": "BENEPRPPBTC",
+      "path": "d.subStats.Benefits?.['Premium PPO']?.blocked ?? 0",
+      "description": "Benefits / Premium PPO — Blocked"
     }
   ],
   "queries": [
