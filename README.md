@@ -1,12 +1,31 @@
-# Test Report Generator
+# MMO Report Generator
 
-Pulls test execution data and open bugs from your test management tool and populates a PowerPoint template automatically. Run it once and your weekly report is done.
+Pulls test execution data and open bugs from your test management tool and automatically populates a PowerPoint and/or Excel report template. Run it once and your weekly report is done.
 
-Supports **Azure DevOps (ADO)**, **Jira**, and **Zephyr Scale** — switch between them with a single environment variable.
+Supports **Azure DevOps (ADO)** and **Jira / Zephyr Scale** as data providers.
 
 ---
 
-## Setup
+## How it works
+
+```
+.env (credentials)
+ui-config.json (workstreams, settings, tokens)
+     │
+     ▼
+gather-data.js          ← fetches stats + bugs from ADO or Jira
+     │
+     ├── extensions/ppt.js         ← fills {{tokens}} in your .pptx template
+     ├── extensions/excel.js       ← fills {{tokens}} in your .xlsx template
+     ├── extensions/ai-summary.js  ← calls Claude to write a status summary
+     └── extensions/sharepoint.js  ← uploads output to SharePoint
+```
+
+Everything about workstreams, tokens, and output settings lives in `ui-config.json`. The only things that go in `.env` are credentials and secrets.
+
+---
+
+## Quick start
 
 ### 1. Install dependencies
 
@@ -14,255 +33,258 @@ Supports **Azure DevOps (ADO)**, **Jira**, and **Zephyr Scale** — switch betwe
 npm install
 ```
 
-### 2. Choose your provider and configure your environment
+### 2. Set your credentials in `.env`
 
-Copy `.env.example` to `.env` and fill in the fields for the provider you're using. The key variable is:
-
-```
-TEST_PROVIDER=ado   # options: ado | jira | zephyr
-```
-
-#### Azure DevOps
-
-```
-ADO_ORG=your-org-name
-ADO_PROJECT=your-project-name
-ADO_PAT=your-personal-access-token
-
-PLAN_ID=12345
-
-SIT_SUITE_PDM=
-SIT_SUITE_BENEFITS=
-SIT_SUITE_ENROLLMENT=
-SIT_SUITE_EDI=
-
-PDMAreaPath=MyProject\PDM
-BenefitsAreaPath=MyProject\Benefits
-EnrollmentAreaPath=MyProject\Enrollment
-EDIAreaPath=MyProject\EDI
-```
-
-Your PAT needs Read access for Test Plans and Work Items.
-
-#### Jira
-
-```
-JIRA_DOMAIN=mycompany
-JIRA_EMAIL=you@company.com
-JIRA_API_TOKEN=your-jira-api-token
-
-JIRA_PROJECT_PDM=PDM
-JIRA_PROJECT_BENEFITS=BEN
-JIRA_PROJECT_ENROLLMENT=ENR
-JIRA_PROJECT_EDI=EDI
-
-# Optional: leave blank to use the default JQL (issuetype = Test / issuetype = Bug AND statusCategory != Done)
-JIRA_TEST_JQL_PDM=
-JIRA_BUG_JQL_PDM=
-```
-
-Generate an API token at: https://id.atlassian.com/manage-profile/security/api-tokens
-
-#### Zephyr Scale
-
-```
-ZEPHYR_TOKEN=your-zephyr-scale-api-token
-
-ZEPHYR_CYCLE_PDM=PDM-C1
-ZEPHYR_CYCLE_BENEFITS=BEN-C1
-ZEPHYR_CYCLE_ENROLLMENT=ENR-C1
-ZEPHYR_CYCLE_EDI=EDI-C1
-
-# Zephyr fetches bugs from Jira, so you still need the Jira credentials
-JIRA_DOMAIN=mycompany
-JIRA_EMAIL=you@company.com
-JIRA_API_TOKEN=your-jira-api-token
-
-JIRA_PROJECT_PDM=PDM
-# Optional per-workstream bug JQL:
-JIRA_BUG_JQL_PDM=
-```
-
-### 3. Add your PowerPoint template
-
-Place your slide deck in this folder and name it `temp.pptx`. If you prefer a different name or location, set `PPTX_TEMPLATE=/full/path/to/file.pptx` in your `.env`.
-
-### 4. Run it
+Copy `.env.example` to `.env` and fill in only the credentials block for your provider:
 
 ```bash
-node generate-report.js
+cp .env.example .env
 ```
 
-The filled-in PowerPoint is saved as `MMO_Report_YYYY-MM-DD.pptx` in this folder. You can change the output path with `--out`:
+**Minimum required for ADO:**
+```
+TEST_PROVIDER=ado
+ADO_ORG=your-org          # part after dev.azure.com/ in the URL
+ADO_PROJECT=your-project
+ADO_PAT=your-pat          # needs Read access for Work Items + Test Management
+```
+
+**Minimum required for Jira / Zephyr:**
+```
+TEST_PROVIDER=jira
+JIRA_DOMAIN=mycompany     # part before .atlassian.net
+JIRA_EMAIL=you@company.com
+JIRA_API_TOKEN=your-token
+ZEPHYR_TOKEN=your-zephyr-token   # only needed if using Zephyr for test stats
+```
+
+### 3. Configure workstreams in the UI
+
+Start the config UI:
 
 ```bash
-node generate-report.js --out ./reports/WeeklyReport.pptx
+npm run ui
+# → opens at http://localhost:3000
 ```
+
+Go to the **Credentials** tab and configure your workstreams (suite IDs, area paths, project keys). This writes to `ui-config.json` — no need to put these values in `.env`.
+
+### 4. Add your report templates
+
+- **PowerPoint:** place your `.pptx` in this folder (default name: `temp.pptx`). Override with `PPTX_TEMPLATE=/path/to/file.pptx` in `.env`.
+- **Excel:** place your `.xlsx` template here (default name: `template.xlsx`). Override with `EXCEL_TEMPLATE=/path/to/file.xlsx` in `.env`. Run `node create-excel-template.js` to generate a starter template with demo data.
+
+### 5. Run the report
+
+```bash
+npm run generate
+```
+
+Output files are saved to the project folder:
+- `MMO_Report_YYYY-MM-DD.pptx`
+- `MMO_Report_YYYY-MM-DD.xlsx`
+- `Summary_YYYY-MM-DD.txt` (AI summary, if enabled)
+
+---
+
+## The UI (`npm run ui`)
+
+The browser-based UI runs a local server that lets you configure and run the report without touching any files directly.
+
+| Tab | What it controls |
+|---|---|
+| **Data Preview** | Live view of fetched stats — bar charts, workstream table, sub-suite breakdown |
+| **Settings** | Output formats (PPT / Excel / AI), schedule, fetch options |
+| **Credentials** | ADO/Jira connection details, workstream suite IDs and area paths, template paths |
+| **AI** | System prompt, user prompt suffix, context file upload, save-to-file toggle |
+
+Changes made in the UI are saved to `ui-config.json` immediately. The next report run picks them up automatically.
+
+### Scheduled runs
+
+The UI supports automated scheduled runs via the Settings tab (cron expression). The scheduler only runs while the UI server is active (`npm run ui`).
 
 ---
 
 ## Setting up your PowerPoint template
 
-The script works like a mail merge — you put placeholder tokens in your slides and they get replaced with real values on each run. Here's how to set that up correctly.
+The report works like a mail merge — you place `{{TOKEN}}` placeholders in your slides and they get replaced with live data on each run.
 
-**Steps:**
+**Tips:**
+- Type each token in one pass without stopping — PowerPoint splits text into internal "runs" when you pause or change formatting, which can break token detection.
+- The same token can appear on multiple slides; all instances are replaced.
+- Tokens are case-sensitive and must have no spaces inside the braces.
 
-1. Open `temp.pptx` in PowerPoint.
-2. Click into any text box where you want a value to appear.
-3. Type the token exactly as shown — double curly braces, no spaces, case-sensitive. For example: `{{TTC}}`
-4. **Important:** type it in one go without stopping, and don't change the font, color, or size partway through. PowerPoint internally splits text into separate chunks called "runs" whenever formatting changes, and if a token gets split across two runs it won't be replaced. The script has logic to fix most of these cases, but typing it fresh is the safest approach.
-5. Save the file.
+---
 
-The script processes every slide, so you can use the same token on multiple slides and they'll all be populated.
+## Setting up your Excel template
+
+Same `{{TOKEN}}` approach as PowerPoint. The extension reads your `.xlsx` template, replaces all tokens, then repopulates the data sheets (By Workstream, Sub-Suites, Bug Analysis) with live data.
+
+To create a starter template with the correct sheet layout and column structure:
+
+```bash
+node create-excel-template.js
+# creates template.xlsx in this folder
+```
+
+You can then open `template.xlsx`, add charts, adjust styling, and add any `{{TOKEN}}` cells you want. The data sheets are repopulated on each run; the Summary sheet tokens are replaced in-place.
 
 ---
 
 ## Available tokens
 
-All tokens are defined in `variables.js`. Here's what's available by default.
+Tokens are defined in `ui-config.json` under `variableMappings`. Each entry has:
+- `token` — the placeholder name used in templates (without the `{{}}`)
+- `path` — a JavaScript expression evaluated against the data object `d`
+- `description` — human-readable label shown in the UI
+
+You can add, edit, or remove tokens from the UI (Settings → Variable Mappings) or directly in `ui-config.json`.
+
+### Overall totals
+
+| Token | Description |
+|---|---|
+| `{{TTC}}` | Total planned test cases (all workstreams) |
+| `{{ETC}}` | Total executed |
+| `{{PTC}}` | Total passed |
+| `{{FTC}}` | Total failed |
+| `{{NSTC}}` | Total not started |
+| `{{IPTC}}` | Total in progress |
+| `{{PP}}` | Overall pass % (passed / executed × 100) |
+| `{{FP}}` | Overall fail % (failed / executed × 100) |
+| `{{Date}}` | Report date — MM/DD/YYYY, Eastern time |
 
 ### PDM
 
-| Token | Meaning |
+| Token | Description |
 |---|---|
-| `{{PDMTTC}}` | Planned test cases |
+| `{{PDMTTC}}` | Planned |
 | `{{PDMETC}}` | Executed |
-| `{{PDMNSTC}}` | Not started |
-| `{{PDMIPTC}}` | In progress |
 | `{{PDMPTC}}` | Passed |
 | `{{PDMFTC}}` | Failed |
-| `{{PDMTB}}` | Open bug count |
+| `{{PDMNSTC}}` | Not started |
+| `{{PDMIPTC}}` | In progress |
+| `{{PDMIT2IT20BTC}}` | Iteration 2.0 — Blocked |
+| `{{PDMIT2IT21BTC}}` | Iteration 2.1 — Blocked |
+| `{{PDMIT2IT20PP}}` | Iteration 2.0 — Pass % |
+| `{{PDMIT2IT20FP}}` | Iteration 2.0 — Fail % |
+| `{{PDMIT2IT20EP}}` | Iteration 2.0 — Execution % |
+| `{{PDMIT2IT21PP}}` | Iteration 2.1 — Pass % |
+| `{{PDMIT2IT21FP}}` | Iteration 2.1 — Fail % |
+| `{{PDMIT2IT21EP}}` | Iteration 2.1 — Execution % |
+| `{{PDMIT2IT20CPBTC}}` | Iteration 2.0 / CPIMS — Blocked |
+| `{{PDMIT2IT20ROBTC}}` | Iteration 2.0 / Rosters — Blocked |
+| `{{PDMIT2IT20ANBTC}}` | Iteration 2.0 / Ancillary — Blocked |
+| `{{PDMIT2IT21CPBTC}}` | Iteration 2.1 / CPIMS — Blocked |
+| `{{PDMIT2IT21ROBTC}}` | Iteration 2.1 / Rosters — Blocked |
+| `{{PDMIT2IT21ANBTC}}` | Iteration 2.1 / Ancillary — Blocked |
 
 ### Benefits
 
-| Token | Meaning |
+| Token | Description |
 |---|---|
-| `{{BTTC}}` | Planned test cases |
+| `{{BTTC}}` | Planned |
 | `{{BETC}}` | Executed |
-| `{{BNSTC}}` | Not started |
-| `{{BIPTC}}` | In progress |
 | `{{BPTC}}` | Passed |
 | `{{BFTC}}` | Failed |
-| `{{BTB}}` | Open bug count |
+| `{{BNSTC}}` | Not started |
+| `{{BIPTC}}` | In progress |
+| `{{BENEBTC}}` | Blocked |
+| `{{BENEPP}}` | Pass % |
+| `{{BENEFP}}` | Fail % |
+| `{{BENEEP}}` | Execution % |
+| `{{BENESIHMBTC}}` | Signature HMO — Blocked |
+| `{{BENEACPPBTC}}` | Access PPO (Premium PPO INN) — Blocked |
+| `{{BENEPRPPBTC}}` | Premium PPO — Blocked |
 
 ### Enrollment
 
-| Token | Meaning |
+| Token | Description |
 |---|---|
-| `{{ETTC}}` | Planned test cases |
+| `{{ETTC}}` | Planned |
 | `{{EETC}}` | Executed |
-| `{{ENSTC}}` | Not started |
-| `{{EIPTC}}` | In progress |
 | `{{EPTC}}` | Passed |
 | `{{EFTC}}` | Failed |
-| `{{ETB}}` | Open bug count |
+| `{{ENSTC}}` | Not started |
+| `{{EIPTC}}` | In progress |
+| `{{ENROBTC}}` | Blocked |
+| `{{ENROPP}}` | Pass % |
+| `{{ENROFP}}` | Fail % |
+| `{{ENROEP}}` | Execution % |
 
 ### EDI
 
-| Token | Meaning |
+| Token | Description |
 |---|---|
-| `{{EDITTC}}` | Planned test cases |
+| `{{EDITTC}}` | Planned |
 | `{{EDIETC}}` | Executed |
-| `{{EDINSTC}}` | Not started |
-| `{{EDIIPTC}}` | In progress |
 | `{{EDIPTC}}` | Passed |
 | `{{EDIFTC}}` | Failed |
-| `{{EDITB}}` | Open bug count |
+| `{{EDINSTC}}` | Not started |
+| `{{EDIIPTC}}` | In progress |
+| `{{EDIBTC}}` | Blocked |
+| `{{EDIPP}}` | Pass % |
+| `{{EDIFP}}` | Fail % |
+| `{{EDIEP}}` | Execution % |
 
-### Overall (all workstreams combined)
+### AI Summary
 
-| Token | Meaning |
+| Token | Description |
 |---|---|
-| `{{TTC}}` | Total planned test cases |
-| `{{ETC}}` | Total executed |
-| `{{NSTC}}` | Total not started |
-| `{{IPTC}}` | Total in progress |
-| `{{PTC}}` | Total passed |
-| `{{FTC}}` | Total failed |
-| `{{TB}}` | Total open bugs |
-| `{{PP}}` | Overall pass rate (whole number %) |
-| `{{FP}}` | Overall fail rate (whole number %) |
+| `{{AISummary}}` | The full AI-generated status summary text |
 
-### Other
+---
 
-| Token | Meaning |
-|---|---|
-| `{{Date}}` | Today's date in EST — MM/DD/YYYY |
+## Test execution statuses
+
+| Status | Counted as Executed? | Notes |
+|---|---|---|
+| Passed | Yes | |
+| Failed | Yes | |
+| In Progress | Yes | |
+| Blocked | **No** | Test was blocked from running — tracked separately |
+| Not Started | No | |
+
+`planned = executed + notStarted + inProgress + blocked`
 
 ---
 
 ## Adding a new workstream
 
-**Step 1 — Add it to the WORKSTREAMS array in `generate-report.js`:**
+**Option A — UI (recommended):**
+Go to Credentials → Workstreams → Add Workstream. Fill in the name, suite ID, and area path. Save.
 
-Each workstream object holds config for all three providers. Only the fields that match your active `TEST_PROVIDER` are used — the rest are ignored.
+**Option B — Edit `ui-config.json` directly:**
 
-```js
-const WORKSTREAMS = [
-  // existing entries...
-  {
-    name: 'Finance',    // this name is the key everywhere — must match d.stats.Finance in variables.js
-
-    // ADO
-    planId:     process.env.PLAN_ID,
-    sitSuiteId: process.env.SIT_SUITE_FINANCE,
-    areaPath:   process.env.FinanceAreaPath,
-
-    // Jira
-    projectKey: process.env.JIRA_PROJECT_FINANCE,
-    testJql:    process.env.JIRA_TEST_JQL_FINANCE,
-    bugJql:     process.env.JIRA_BUG_JQL_FINANCE,
-
-    // Zephyr
-    testCycleKey: process.env.ZEPHYR_CYCLE_FINANCE,
-  },
-];
+```json
+{
+  "name": "Finance",
+  "planId": "20140",
+  "sitSuiteId": "99999",
+  "areaPath": "HRP\\Testing\\Finance",
+  "projectKey": "",
+  "testCycleKey": ""
+}
 ```
 
-**Step 2 — Add the relevant env vars to your `.env` for whichever provider you're using:**
+Then add tokens for it in `variableMappings`:
 
-```
-# ADO
-SIT_SUITE_FINANCE=88888
-FinanceAreaPath=MyProject\Finance
-
-# Jira
-JIRA_PROJECT_FINANCE=FIN
-
-# Zephyr
-ZEPHYR_CYCLE_FINANCE=FIN-C1
+```json
+{ "token": "FINTTC",  "path": "d.stats.Finance.planned",    "description": "Finance — Planned" },
+{ "token": "FINETC",  "path": "d.stats.Finance.executed",   "description": "Finance — Executed" },
+{ "token": "FINPTC",  "path": "d.stats.Finance.passed",     "description": "Finance — Passed" }
 ```
 
-**Step 3 — Add tokens for it to `variables.js`:**
-
-```js
-// Finance
-FTTC:  d => d.stats.Finance.planned,
-FETC:  d => d.stats.Finance.executed,
-FNSTC: d => d.stats.Finance.notStarted,
-FIPTC: d => d.stats.Finance.inProgress,
-FPTC:  d => d.stats.Finance.passed,
-FFTC:  d => d.stats.Finance.failed,
-FTB:   d => d.bugs.Finance.length,
-```
-
-The workstream name in `d.stats.Finance` must match the `name` field in `WORKSTREAMS` exactly (case-sensitive).
-
-**Step 4 — Add the tokens to your template** using the same process described in the PowerPoint setup section above.
+The workstream `name` is the key used everywhere — it must match exactly (case-sensitive) in `d.stats.<name>` expressions.
 
 ---
 
-## Adding or changing a variable
+## The data object (`d`)
 
-Open `variables.js`. Each line follows this pattern:
+Token expressions have access to the full data object. Here's what's available:
 
-```js
-TOKEN_NAME: d => <expression>,
-```
-
-The `d` object gives you access to everything the script fetched:
-
-| What you write | What it gives you |
+| Expression | What it returns |
 |---|---|
 | `d.stats.PDM.planned` | PDM planned test case count |
 | `d.stats.PDM.executed` | PDM executed count |
@@ -270,59 +292,76 @@ The `d` object gives you access to everything the script fetched:
 | `d.stats.PDM.failed` | PDM failed count |
 | `d.stats.PDM.notStarted` | PDM not started count |
 | `d.stats.PDM.inProgress` | PDM in progress count |
+| `d.stats.PDM.blocked` | PDM blocked count |
+| `d.subStats.PDM['Iteration 2 / Iteration 2.0'].executed` | Sub-suite stat (breadcrumb path) |
+| `d.consolidatedData.planned` | Total planned across all workstreams |
+| `d.bugs.PDM` | Array of open PDM bugs |
 | `d.bugs.PDM.length` | PDM open bug count |
-| `d.consolidatedData.<field>` | Same fields but summed across all workstreams |
-| `d.allBugs.total` | Total bugs across all workstreams |
-| `d.allBugs.sev1` / `sev2` / `sev3` / `sev4` | Bugs broken down by severity |
+| `d.bugsTotal` | Total open bugs across all workstreams |
+| `d.bugsBySeverity['1 - Critical']` | Count of Critical bugs |
+| `d.bugsByPriority['1']` | Count of P1 bugs |
+| `d._aiSummary` | AI-generated summary text (if ai-summary ran) |
 
-Replace `PDM` with any workstream name from the `WORKSTREAMS` array.
+Replace `PDM` with any workstream name. Sub-suite paths use the exact breadcrumb string from ADO.
 
-**Examples:**
+---
 
-```js
-// Pass rate for Benefits only
-BEN_PP: d => d.stats.Benefits.executed
-  ? Math.round((d.stats.Benefits.passed / d.stats.Benefits.executed) * 100)
-  : 0,
+## AI Summary
 
-// Critical bug count across all workstreams
-CRIT_BUGS: d => d.allBugs.sev1,
+Add `ai-summary` to the output formats (UI → Settings, or `OUTPUT_FORMAT=ai-summary,ppt` in `.env`) and set your `ANTHROPIC_API_KEY`.
 
-// Static label — the function doesn't have to use d at all
-CYCLE: () => 'SIT Cycle 3',
+Configure the AI from the **AI tab** in the UI:
+- **System prompt** — sets the AI's role and tone
+- **User prompt suffix** — appended to the data block sent to Claude
+- **Context file** — upload a CSV or text file with project notes; the AI includes it in the prompt
+- **Save to file** — toggle whether the summary is written to `Summary_YYYY-MM-DD.txt`
+
+The summary is also injected into PPT/Excel via the `{{AISummary}}` token.
+
+---
+
+## SharePoint upload
+
+Add `sharepoint` to your output formats and set these in `.env`:
+
+```
+SHAREPOINT_TENANT_ID=       # Azure AD → Overview → Directory (tenant) ID
+SHAREPOINT_CLIENT_ID=       # App registration → Application (client) ID
+SHAREPOINT_CLIENT_SECRET=   # Client secret value
+SHAREPOINT_SITE_URL=        # e.g. https://myorg.sharepoint.com/sites/Weekly-Reports
+SHAREPOINT_FOLDER=          # e.g. Shared Documents/Weekly Status
 ```
 
-Once the token is in `variables.js`, add the matching `{{TOKEN_NAME}}` placeholder to your PowerPoint template and it will be filled in on the next run.
+**Azure AD setup (one-time):**
+1. portal.azure.com → Azure Active Directory → App registrations → New registration
+2. API permissions → Microsoft Graph → Application → `Sites.ReadWrite.All`
+3. Grant admin consent
+4. Certificates & secrets → New client secret → copy the Value
 
 ---
 
 ## Troubleshooting
 
-**A token isn't being replaced in the output**
-The most common cause is PowerPoint splitting the token internally. Delete the placeholder text and retype it from scratch in a single pass without changing any formatting mid-token. Avoid pasting from another source.
+**A token isn't being replaced in the PowerPoint**
+Delete the placeholder and retype it from scratch in one pass without changing formatting mid-token. PowerPoint splits text internally, which can break token detection.
 
 **All counts are 0 for a workstream**
-Run with `DEBUG=true` to print the exact query being sent:
-```bash
-DEBUG=true node generate-report.js
-```
-For ADO: check that the area path in your `.env` matches what's in Project Settings → Area Paths exactly.
-For Jira/Zephyr: paste the printed JQL into Jira's issue search to verify it returns results.
+Check the suite ID and area path in the UI (Credentials tab). For ADO, the area path must match exactly what's in Project Settings → Area Paths. Try running with `DEBUG=true` to print the raw queries.
 
-**`Unknown TEST_PROVIDER` error**
-The value of `TEST_PROVIDER` in your `.env` must be exactly `ado`, `jira`, or `zephyr` (lowercase).
+**`Unknown OUTPUT_FORMAT` error**
+The format name must match a file in `extensions/`. Available: `ppt`, `excel`, `ai-summary`, `sharepoint`.
 
 **401 error (ADO)**
-Your PAT is expired or doesn't have the right scopes. Generate a new one with Read access for Work Items and Test Management.
+Your PAT is expired or missing scopes. Generate a new one at `https://dev.azure.com/{org}/_usersSettings/tokens` with Read access for Work Items and Test Management.
 
 **401 error (Jira / Zephyr)**
-Check that `JIRA_EMAIL` and `JIRA_API_TOKEN` (or `ZEPHYR_TOKEN`) are set correctly. Jira API tokens are separate from your password — generate one at https://id.atlassian.com/manage-profile/security/api-tokens.
+Verify `JIRA_EMAIL` and `JIRA_API_TOKEN`. Jira API tokens are separate from your password — generate one at https://id.atlassian.com/manage-profile/security/api-tokens.
 
 **404 error (ADO)**
-`ADO_ORG` or `ADO_PROJECT` doesn't match exactly — both are case-sensitive.
+`ADO_ORG` and `ADO_PROJECT` are case-sensitive and must match exactly.
 
-**404 error (Zephyr)**
-The `testCycleKey` value doesn't match an existing cycle. Check the Zephyr Scale UI for the exact key format (e.g. `PDM-C1`).
+**Excel merge error on run**
+This can happen if your template has merged cells in a range the extension tries to repopulate. The extension handles this automatically — if you see it, check that `EXCEL_TEMPLATE` points to the correct file.
 
 **Template file not found**
-Make sure `temp.pptx` is in the same folder as `generate-report.js`, or set `PPTX_TEMPLATE` in your `.env` to the full path.
+Default PPT template: `temp.pptx` in the project folder. Default Excel template: `template.xlsx`. Override with `PPTX_TEMPLATE` or `EXCEL_TEMPLATE` in `.env`.
