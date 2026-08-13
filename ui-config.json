@@ -90,6 +90,11 @@
       "description": "PDM — In Progress"
     },
     {
+      "token": "PDMPSTC",
+      "path": "d.stats.PDM.paused",
+      "description": "PDM — Paused"
+    },
+    {
       "token": "BENETTC",
       "path": "d.stats.Benefits.planned",
       "description": "Benefits — Total Test Cases"
@@ -208,6 +213,11 @@
       "token": "IPTC",
       "path": "d.consolidatedData.inProgress",
       "description": "Overall — In Progress"
+    },
+    {
+      "token": "PSTC",
+      "path": "d.consolidatedData.paused",
+      "description": "Overall — Paused"
     },
     {
       "token": "PDMSITTC",
@@ -1500,14 +1510,29 @@
       "description": "Benefits - Blocked Test Case"
     },
     {
+      "token": "BPSTC",
+      "path": "d.stats.Benefits.paused",
+      "description": "Benefits — Paused"
+    },
+    {
       "token": "ENROBTC",
       "path": "d.stats.Enrollment.blocked",
       "description": "Enrollment - Blocked Test Case"
     },
     {
+      "token": "EPSTC",
+      "path": "d.stats.Enrollment.paused",
+      "description": "Enrollment — Paused"
+    },
+    {
       "token": "EDIBTC",
       "path": "d.stats.EDI.blocked",
       "description": "EDI - Blocked Test Cases"
+    },
+    {
+      "token": "EDIPSTC",
+      "path": "d.stats.EDI.paused",
+      "description": "EDI — Paused"
     },
     {
       "token": "PDMIT2IT20PP",
@@ -1628,6 +1653,21 @@
       "token": "BENEPRPPBTC",
       "path": "d.subStats.Benefits?.['Premium PPO']?.blocked ?? 0",
       "description": "Benefits / Premium PPO — Blocked"
+    },
+    {
+      "token": "BENESIHMPSTC",
+      "path": "d.subStats.Benefits['Signature HMO'].paused",
+      "description": "Signature HMO Paused"
+    },
+    {
+      "token": "BENEPRPPPSTC",
+      "path": "d.subStats.Benefits?.['Premium PPO'].paused",
+      "description": "Premium pro pause"
+    },
+    {
+      "token": "BENEACPPPSTC",
+      "path": "d.subStats.Benefits?.['Access PPO (Premium PPO INN)'].paused",
+      "description": "Access Paused"
     }
   ],
   "queries": [

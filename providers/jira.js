@@ -84,7 +84,7 @@ function shapeIssue(issue) {
 export async function fetchTestStats({ name, testCycleKey }) {
   if (!testCycleKey) {
     console.warn(`  ⚠  ${name}: no testCycleKey configured, skipping test stats.`);
-    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
+    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0, paused: 0 };
   }
 
   let executions;
@@ -92,11 +92,11 @@ export async function fetchTestStats({ name, testCycleKey }) {
     executions = await fetchCycleExecutions(testCycleKey);
   } catch (e) {
     console.warn(`  ⚠  ${name}: Zephyr fetch failed — ${e.message.split('\n')[0]}`);
-    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
+    return { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0, paused: 0 };
   }
 
   console.log(`    → ${name}: ${executions.length} execution(s) in cycle ${testCycleKey}`);
-  let planned = 0, executed = 0, passed = 0, failed = 0, notStarted = 0, inProgress = 0, blocked = 0;
+  let planned = 0, executed = 0, passed = 0, failed = 0, notStarted = 0, inProgress = 0, blocked = 0, paused = 0;
   for (const ex of executions) {
     planned++;
     const statusKey = (ex.status?.name || 'NOT_EXECUTED').toUpperCase().replace(/ /g, '_');
@@ -105,9 +105,10 @@ export async function fetchTestStats({ name, testCycleKey }) {
     else if (mapped === 'failed')     { failed++;     executed++; }
     else if (mapped === 'inProgress') { inProgress++; executed++; }
     else if (mapped === 'blocked')    { blocked++; }
+    else if (mapped === 'paused')     { paused++; }
     else                              { notStarted++; }
   }
-  return { planned, executed, passed, failed, notStarted, inProgress, blocked };
+  return { planned, executed, passed, failed, notStarted, inProgress, blocked, paused };
 }
 
 export async function runQuery({ name }, jql) {

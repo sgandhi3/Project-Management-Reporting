@@ -12,7 +12,7 @@ const OUTPUTS = SETTINGS.outputFormats?.length
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function sumStats(statsMap) {
-  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
+  const totals = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0, paused: 0 };
   for (const s of Object.values(statsMap)) {
     for (const k of Object.keys(totals)) totals[k] += (s[k] ?? 0);
   }
@@ -113,7 +113,8 @@ async function collectAllData(provider) {
     + '\n  Failed:      ' + data.consolidatedData.failed
     + '\n  Not Started: ' + data.consolidatedData.notStarted
     + '\n  In Progress: ' + data.consolidatedData.inProgress
-    + '\n  Blocked:     ' + data.consolidatedData.blocked + '\n');
+    + '\n  Blocked:     ' + data.consolidatedData.blocked
+    + '\n  Paused:      ' + data.consolidatedData.paused + '\n');
 
   // ── Auto-total for every per-workstream query (d.bugsTotal, etc.) ─────────────
   for (const q of wsQueries) {

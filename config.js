@@ -48,6 +48,7 @@ export const JIRA_STATUS_MAP = {
   'backlog':     'notStarted',
   'not started': 'notStarted',
   'blocked':     'blocked',
+  'paused':      'paused',
 };
 
 export const JIRA_PRIORITY_MAP = {
@@ -66,6 +67,7 @@ export const ZEPHYR_STATUS_MAP = {
   'NOT_EXECUTED': 'notStarted',
   'UNEXECUTED':   'notStarted',
   'BLOCKED':      'blocked',
+  'PAUSED':       'paused',
 };
 
 // ─── Workstreams ───────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ export const VARIABLE_MAP = {
   PDMIPTC:   d => d.stats.PDM.inProgress,
   PDMPTC:    d => d.stats.PDM.passed,
   PDMFTC:    d => d.stats.PDM.failed,
+  PDMPSTC:   d => d.stats.PDM.paused,
   PDMTB:     d => d.bugs.PDM.length,
 
   // Benefits
@@ -29,6 +30,7 @@ export const VARIABLE_MAP = {
   BIPTC:     d => d.stats.Benefits.inProgress,
   BPTC:      d => d.stats.Benefits.passed,
   BFTC:      d => d.stats.Benefits.failed,
+  BPSTC:     d => d.stats.Benefits.paused,
   BTB:       d => d.bugs.Benefits.length,
 
   // Enrollment
@@ -38,6 +40,7 @@ export const VARIABLE_MAP = {
   EIPTC:     d => d.stats.Enrollment.inProgress,
   EPTC:      d => d.stats.Enrollment.passed,
   EFTC:      d => d.stats.Enrollment.failed,
+  EPSTC:     d => d.stats.Enrollment.paused,
   ETB:       d => d.bugs.Enrollment.length,
 
   // EDI
@@ -47,6 +50,7 @@ export const VARIABLE_MAP = {
   EDIIPTC:   d => d.stats.EDI.inProgress,
   EDIPTC:    d => d.stats.EDI.passed,
   EDIFTC:    d => d.stats.EDI.failed,
+  EDIPSTC:   d => d.stats.EDI.paused,
   EDITB:     d => d.bugs.EDI.length,
 
   // Overall totals across all workstreams
@@ -56,6 +60,7 @@ export const VARIABLE_MAP = {
   IPTC:      d => d.consolidatedData.inProgress,
   PTC:       d => d.consolidatedData.passed,
   FTC:       d => d.consolidatedData.failed,
+  PSTC:      d => d.consolidatedData.paused,
   TB:        d => d.bugsBySeverity.total,
 
   // Calculated percentages — guard against divide-by-zero if nothing has run yet

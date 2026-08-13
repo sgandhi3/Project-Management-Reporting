@@ -255,7 +255,7 @@ function buildDataPaths(uiConfig) {
   const queries     = uiConfig.queries || [];
 
   // Test stats per workstream
-  const statFields = ['planned', 'executed', 'passed', 'failed', 'notStarted', 'inProgress'];
+  const statFields = ['planned', 'executed', 'passed', 'failed', 'notStarted', 'inProgress', 'blocked', 'paused'];
   for (const ws of workstreams) {
     for (const f of statFields) paths.push(`d.stats.${ws.name}.${f}`);
   }
