@@ -233,14 +233,35 @@ async function main() {
     return;
   }
 
+  // --narrative-data: like --preview, but keeps the full open-bug arrays
+  // (id/title/severity/priority/owner/etc.) instead of collapsing them to a
+  // count — this is what a narrative-writing agent needs to describe defect
+  // themes; skips extensions same as --preview.
+  if (args.includes('--narrative-data')) {
+    process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
+      stats: data.stats,
+      subStats: data.subStats,
+      consolidatedData: data.consolidatedData,
+      bugs: data.bugs,
+    }) + '\n');
+    return;
+  }
+
   printDataSnapshot(data);
 
-  // Run AI first if enabled — populates data._aiSummary for use by ppt/excel
+  // Run AI extensions first — they populate data._aiSummary / data._aiNarratives
+  // for use by ppt/excel. ai-narrative runs whenever ppt output is requested,
+  // since the template's {{AI_...}} tokens live in the ppt deck.
   const aiIdx = OUTPUTS.indexOf('ai-summary');
   if (aiIdx !== -1) {
     const aiExt = await import('./extensions/ai-summary.js');
     await aiExt.generate(data);
     OUTPUTS.splice(aiIdx, 1); // prevent running again below
+  }
+
+  if (OUTPUTS.includes('ppt')) {
+    const narrativeExt = await import('./extensions/ai-narrative.js');
+    await narrativeExt.generate(data);
   }
 
   // Then run remaining extensions (ppt, excel, sharepoint, etc.)
