@@ -2,72 +2,231 @@
 // Each entry is: TOKEN_NAME: d => <expression that reads from the data object>
 //
 // The data object `d` has this shape:
-//   d.stats.<WorkstreamName>        — { planned, executed, passed, failed, notStarted, inProgress }
-//   d.<queryKey>.<WorkstreamName>   — array of items from that query (e.g. d.bugs.PDM)
-//   d.<queryKey>Total               — total item count across all workstreams (e.g. d.bugsTotal)
-//   d.consolidatedData              — stats summed across all workstreams
-//   d.<queryKey>By<Field>           — group-by counts: { total, 'value1': count, ... }
-//                                     e.g. d.bugsBySeverity['1 - Critical'], d.bugsByPriority[1]
+//   d.stats.<WorkstreamName>               — { planned, executed, passed, failed, notStarted, inProgress, blocked, paused }
+//   d.subStats.<WorkstreamName>['path']    — same shape for sub-suites (breadcrumb from ADO suite tree)
+//   d.<queryKey>.<WorkstreamName>          — array of items from that query (e.g. d.bugs.PDM)
+//   d.consolidatedData                     — stats summed across all workstreams
+//   d.<queryKey>By<Field>                  — group-by counts: { total, 'value1': count, ... }
 //
+// Run `node gather-data.js --preview` to see all available d.subStats keys.
 // WorkstreamName must match the `name` field in the WORKSTREAMS array in config.js.
+
+const pct  = (n, d) => d ? Math.round((n / d) * 100) : 0;
+const sub  = (d, ws, path) => d.subStats?.[ws]?.[path] ?? {};
+const stat = (d, ws, path, field) => sub(d, ws, path)[field] ?? 0;
+
+// Sums a field across multiple sub-suite paths
+const sumStat = (d, ws, paths, field) => paths.reduce((acc, p) => acc + stat(d, ws, p, field), 0);
+
+// PDM Iteration 3 CPIMS has no parent key — sum the four individual sub-suites
+const CPIMS3_PATHS = [
+  'Cursory / Iteration 3 / Cpims-Prac',
+  'Cursory / Iteration 3 / Cpims-Prac Role',
+  'Cursory / Iteration 3 / CPIMS-ORG Location',
+  'Cursory / Iteration 3 / CPIMS-ORG',
+];
 
 export const VARIABLE_MAP = {
 
-  // PDM
-  PDMTTC:    d => d.stats.PDM.planned,
-  PDMETC:    d => d.stats.PDM.executed,
-  PDMNSTC:   d => d.stats.PDM.notStarted,
-  PDMIPTC:   d => d.stats.PDM.inProgress,
-  PDMPTC:    d => d.stats.PDM.passed,
-  PDMFTC:    d => d.stats.PDM.failed,
-  PDMPSTC:   d => d.stats.PDM.paused,
-  PDMTB:     d => d.bugs.PDM.length,
+  // ── Report Date ────────────────────────────────────────────────────────────
+  Date: () => new Date().toLocaleDateString('en-US', {
+    timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric',
+  }),
 
-  // Benefits
-  BTTC:      d => d.stats.Benefits.planned,
-  BETC:      d => d.stats.Benefits.executed,
-  BNSTC:     d => d.stats.Benefits.notStarted,
-  BIPTC:     d => d.stats.Benefits.inProgress,
-  BPTC:      d => d.stats.Benefits.passed,
-  BFTC:      d => d.stats.Benefits.failed,
-  BPSTC:     d => d.stats.Benefits.paused,
-  BTB:       d => d.bugs.Benefits.length,
+  // ── Grand Totals (all workstreams combined) ────────────────────────────────
+  TTC:  d => d.consolidatedData.planned,
+  ETC:  d => d.consolidatedData.executed,
+  EP:   d => pct(d.consolidatedData.executed,  d.consolidatedData.planned),
+  PTC:  d => d.consolidatedData.passed,
+  PP:   d => pct(d.consolidatedData.passed,    d.consolidatedData.executed),
+  FTC:  d => d.consolidatedData.failed,
+  FP:   d => pct(d.consolidatedData.failed,    d.consolidatedData.executed),
+  IPTC: d => d.consolidatedData.inProgress,
+  NSTC: d => d.consolidatedData.notStarted,
+  TB:   d => d.bugsBySeverity.total,
 
-  // Enrollment
-  ETTC:      d => d.stats.Enrollment.planned,
-  EETC:      d => d.stats.Enrollment.executed,
-  ENSTC:     d => d.stats.Enrollment.notStarted,
-  EIPTC:     d => d.stats.Enrollment.inProgress,
-  EPTC:      d => d.stats.Enrollment.passed,
-  EFTC:      d => d.stats.Enrollment.failed,
-  EPSTC:     d => d.stats.Enrollment.paused,
-  ETB:       d => d.bugs.Enrollment.length,
+  // ── PDM — Cursory sub-suite (key: 'Cursory') ──────────────────────────────
+  PDMCTTC:   d => stat(d, 'PDM', 'Cursory', 'planned'),
+  PDMCETC:   d => stat(d, 'PDM', 'Cursory', 'executed'),
+  PDMCEP:    d => pct(stat(d, 'PDM', 'Cursory', 'executed'),  stat(d, 'PDM', 'Cursory', 'planned')),
+  PDMCPTC:   d => stat(d, 'PDM', 'Cursory', 'passed'),
+  PDMCPP:    d => pct(stat(d, 'PDM', 'Cursory', 'passed'),    stat(d, 'PDM', 'Cursory', 'executed')),
+  PDMCFTC:   d => stat(d, 'PDM', 'Cursory', 'failed'),
+  PDMCFP:    d => pct(stat(d, 'PDM', 'Cursory', 'failed'),    stat(d, 'PDM', 'Cursory', 'executed')),
+  PDMCIPTC:  d => stat(d, 'PDM', 'Cursory', 'inProgress'),
+  PDMCB:     d => (d.bugs?.PDM ?? []).length,
 
-  // EDI
-  EDITTC:    d => d.stats.EDI.planned,
-  EDIETC:    d => d.stats.EDI.executed,
-  EDINSTC:   d => d.stats.EDI.notStarted,
-  EDIIPTC:   d => d.stats.EDI.inProgress,
-  EDIPTC:    d => d.stats.EDI.passed,
-  EDIFTC:    d => d.stats.EDI.failed,
-  EDIPSTC:   d => d.stats.EDI.paused,
-  EDITB:     d => d.bugs.EDI.length,
+  // ── PDM — SIT sub-suite (key: 'SIT') ──────────────────────────────────────
+  PDMSITTC:   d => stat(d, 'PDM', 'SIT', 'planned'),
+  PDMSITETC:  d => stat(d, 'PDM', 'SIT', 'executed'),
+  PDMSITEP:   d => pct(stat(d, 'PDM', 'SIT', 'executed'),  stat(d, 'PDM', 'SIT', 'planned')),
+  PDMSITPTC:  d => stat(d, 'PDM', 'SIT', 'passed'),
+  PDMSITPP:   d => pct(stat(d, 'PDM', 'SIT', 'passed'),    stat(d, 'PDM', 'SIT', 'executed')),
+  PDMSITFTC:  d => stat(d, 'PDM', 'SIT', 'failed'),
+  PDMSITFP:   d => pct(stat(d, 'PDM', 'SIT', 'failed'),    stat(d, 'PDM', 'SIT', 'executed')),
+  PDMSITIPTC: d => stat(d, 'PDM', 'SIT', 'inProgress'),
+  PDMSITB:    d => 0,
 
-  // Overall totals across all workstreams
-  TTC:       d => d.consolidatedData.planned,
-  ETC:       d => d.consolidatedData.executed,
-  NSTC:      d => d.consolidatedData.notStarted,
-  IPTC:      d => d.consolidatedData.inProgress,
-  PTC:       d => d.consolidatedData.passed,
-  FTC:       d => d.consolidatedData.failed,
-  PSTC:      d => d.consolidatedData.paused,
-  TB:        d => d.bugsBySeverity.total,
+  // ── PDM — Cursory Iteration breakdown ─────────────────────────────────────
+  // ADO paths: 'Cursory / Iteration 2 / Iteration 2.0', 'Cursory / Iteration 2 / Iteration 2.1', 'Cursory / Iteration 3'
+  PDMIT2TTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'planned'),
+  PDMIT2ETC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed'),
+  PDMIT2EP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed'), stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'planned')),
+  PDMIT2PTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'passed'),
+  PDMIT2PP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed')),
+  PDMIT2FTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'failed'),
+  PDMIT2FP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed')),
+  PDMIT2IPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'inProgress'),
+  PDMIT2BTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'blocked'),
+  PDMIT2NSTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'notStarted'),
+  PDMIT2B:     d => 0,
 
-  // Calculated percentages — guard against divide-by-zero if nothing has run yet
-  PP:        d => d.consolidatedData.executed ? Math.round((d.consolidatedData.passed / d.consolidatedData.executed) * 100) : 0,
-  FP:        d => d.consolidatedData.executed ? Math.round((d.consolidatedData.failed / d.consolidatedData.executed) * 100) : 0,
+  PDMIT21TTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'planned'),
+  PDMIT21ETC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed'),
+  PDMIT21EP:   d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed'), stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'planned')),
+  PDMIT21PTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'passed'),
+  PDMIT21PP:   d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed')),
+  PDMIT21FTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'failed'),
+  PDMIT21FP:   d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed')),
+  PDMIT21IPTC: d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'inProgress'),
+  PDMIT21BTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'blocked'),
+  PDMIT21NSTC: d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'notStarted'),
+  PDMIT21B:    d => 0,
 
-  // Report date in EST, formatted MM/DD/YYYY
-  Date:      () => new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric' }),
+  PDMIT3TTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'planned'),
+  PDMIT3ETC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'executed'),
+  PDMIT3EP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 3', 'executed'), stat(d, 'PDM', 'Cursory / Iteration 3', 'planned')),
+  PDMIT3PTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'passed'),
+  PDMIT3PP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 3', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 3', 'executed')),
+  PDMIT3FTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'failed'),
+  PDMIT3FP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 3', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 3', 'executed')),
+  PDMIT3IPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3', 'inProgress'),
+  PDMIT3BTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'blocked'),
+  PDMIT3NSTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3', 'notStarted'),
+  PDMIT3B:     d => 0,
+
+  // ── PDM — Iteration 3 Data Source breakdown ────────────────────────────────
+  // CPIMS has no parent suite — summed across 4 individual sub-suites
+  PDMIT3CPTTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'planned'),
+  PDMIT3CPETC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'executed'),
+  PDMIT3CPPTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'passed'),
+  PDMIT3CPFTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'failed'),
+  PDMIT3CPIPTC: d => sumStat(d, 'PDM', CPIMS3_PATHS, 'inProgress'),
+  PDMIT3CPBTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'blocked'),
+  PDMIT3CPNSTC: d => sumStat(d, 'PDM', CPIMS3_PATHS, 'notStarted'),
+  PDMIT3CPB:    d => 0,
+
+  PDMIT3ANTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'planned'),
+  PDMIT3ANETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'executed'),
+  PDMIT3ANPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'passed'),
+  PDMIT3ANFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'failed'),
+  PDMIT3ANIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'inProgress'),
+  PDMIT3ANBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'blocked'),
+  PDMIT3ANNSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'notStarted'),
+  PDMIT3ANB:    d => 0,
+
+  PDMIT3ROTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'planned'),
+  PDMIT3ROETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'executed'),
+  PDMIT3ROPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'passed'),
+  PDMIT3ROFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'failed'),
+  PDMIT3ROIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'inProgress'),
+  PDMIT3ROBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'blocked'),
+  PDMIT3RONSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'notStarted'),
+  PDMIT3ROB:    d => 0,
+
+  PDMIT3PNTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'planned'),
+  PDMIT3PNETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'executed'),
+  PDMIT3PNPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'passed'),
+  PDMIT3PNFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'failed'),
+  PDMIT3PNIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'inProgress'),
+  PDMIT3PNBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'blocked'),
+  PDMIT3PNNSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'notStarted'),
+  PDMIT3PNB:    d => 0,
+
+  // ── PDM — Defect counts by severity ───────────────────────────────────────
+  PDMBCRIT: d => (d.bugs?.PDM ?? []).filter(b => b.severity === '1 - Critical').length,
+  PDMBHIGH: d => (d.bugs?.PDM ?? []).filter(b => b.severity === '2 - High').length,
+  PDMBMED:  d => (d.bugs?.PDM ?? []).filter(b => b.severity === '3 - Medium').length,
+  PDMBLOW:  d => (d.bugs?.PDM ?? []).filter(b => b.severity === '4 - Low').length,
+
+  // ── Benefits — Priority SIT (key: 'Priority') ─────────────────────────────
+  BENEPBTTC:   d => stat(d, 'Benefits', 'Priority', 'planned'),
+  BENEPBETC:   d => stat(d, 'Benefits', 'Priority', 'executed'),
+  BENEPBEP:    d => pct(stat(d, 'Benefits', 'Priority', 'executed'), stat(d, 'Benefits', 'Priority', 'planned')),
+  BENEPBPTC:   d => stat(d, 'Benefits', 'Priority', 'passed'),
+  BENEPBPP:    d => pct(stat(d, 'Benefits', 'Priority', 'passed'),   stat(d, 'Benefits', 'Priority', 'executed')),
+  BENEPBFTC:   d => stat(d, 'Benefits', 'Priority', 'failed'),
+  BENEPBFP:    d => pct(stat(d, 'Benefits', 'Priority', 'failed'),   stat(d, 'Benefits', 'Priority', 'executed')),
+  BENEPBIPTC:  d => stat(d, 'Benefits', 'Priority', 'inProgress'),
+  BENEPBBTC:   d => stat(d, 'Benefits', 'Priority', 'blocked'),
+  BENEPBNSTC:  d => stat(d, 'Benefits', 'Priority', 'notStarted'),
+  BENEPBB:     d => (d.bugs?.Benefits ?? []).length,
+
+  // ── Benefits — 2026 Benefits (all non-Priority suites, computed as total minus Priority) ──
+  BENE26TTC:   d => d.stats.Benefits.planned   - stat(d, 'Benefits', 'Priority', 'planned'),
+  BENE26ETC:   d => d.stats.Benefits.executed  - stat(d, 'Benefits', 'Priority', 'executed'),
+  BENE26EP:    d => pct(d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed'), d.stats.Benefits.planned - stat(d, 'Benefits', 'Priority', 'planned')),
+  BENE26PTC:   d => d.stats.Benefits.passed    - stat(d, 'Benefits', 'Priority', 'passed'),
+  BENE26PP:    d => pct(d.stats.Benefits.passed  - stat(d, 'Benefits', 'Priority', 'passed'),   d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed')),
+  BENE26FTC:   d => d.stats.Benefits.failed    - stat(d, 'Benefits', 'Priority', 'failed'),
+  BENE26FP:    d => pct(d.stats.Benefits.failed  - stat(d, 'Benefits', 'Priority', 'failed'),   d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed')),
+  BENE26IPTC:  d => d.stats.Benefits.inProgress - stat(d, 'Benefits', 'Priority', 'inProgress'),
+  BENE26BTC:   d => d.stats.Benefits.blocked   - stat(d, 'Benefits', 'Priority', 'blocked'),
+  BENE26NSTC:  d => d.stats.Benefits.notStarted - stat(d, 'Benefits', 'Priority', 'notStarted'),
+  BENE26B:     d => 0,
+
+  // ── Benefits — Benefit type breakdown (Priority sub-suites) ───────────────
+  BENESIHMTTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'planned'),
+  BENESIHMETC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'executed'),
+  BENESIHMPTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'passed'),
+  BENESIHMFTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'failed'),
+  BENESIHMIPTC: d => stat(d, 'Benefits', 'Priority / Signature HMO',               'inProgress'),
+  BENESIHMBTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'blocked'),
+  BENESIHMNSTC: d => stat(d, 'Benefits', 'Priority / Signature HMO',               'notStarted'),
+  BENESIHMB:    d => 0,
+
+  BENEACPTTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'planned'),
+  BENEACPETC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'executed'),
+  BENEACPPTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'passed'),
+  BENEACPFTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'failed'),
+  BENEACPIPTC:  d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'inProgress'),
+  BENEACPBTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'blocked'),
+  BENEACPNSTC:  d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'notStarted'),
+  BENEACPB:     d => 0,
+
+  BENEPRPTTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'planned'),
+  BENEPRPETC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'executed'),
+  BENEPRPPTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'passed'),
+  BENEPRPFTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'failed'),
+  BENEPRPIPTC:  d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'inProgress'),
+  BENEPRPBTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'blocked'),
+  BENEPRPNSTC:  d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'notStarted'),
+  BENEPRPB:     d => 0,
+
+  // ── Enrollment (key: 'SIT') ────────────────────────────────────────────────
+  ENROTTC:  d => d.stats.Enrollment.planned,
+  ENROETC:  d => d.stats.Enrollment.executed,
+  ENROEP:   d => pct(d.stats.Enrollment.executed,   d.stats.Enrollment.planned),
+  ENROPTC:  d => d.stats.Enrollment.passed,
+  ENROPP:   d => pct(d.stats.Enrollment.passed,     d.stats.Enrollment.executed),
+  ENROFTC:  d => d.stats.Enrollment.failed,
+  ENROFP:   d => pct(d.stats.Enrollment.failed,     d.stats.Enrollment.executed),
+  ENROIPTC: d => d.stats.Enrollment.inProgress,
+  ENROBTC:  d => d.stats.Enrollment.blocked,
+  ENRONSTC: d => d.stats.Enrollment.notStarted,
+  ENROB:    d => (d.bugs?.Enrollment ?? []).length,
+
+  // ── EDI (key: 'SIT') ───────────────────────────────────────────────────────
+  EDITTC:  d => d.stats.EDI.planned,
+  EDIETC:  d => d.stats.EDI.executed,
+  EDIEP:   d => pct(d.stats.EDI.executed,  d.stats.EDI.planned),
+  EDIPTC:  d => d.stats.EDI.passed,
+  EDIPP:   d => pct(d.stats.EDI.passed,    d.stats.EDI.executed),
+  EDIFTC:  d => d.stats.EDI.failed,
+  EDIFP:   d => pct(d.stats.EDI.failed,    d.stats.EDI.executed),
+  EDIIPTC: d => d.stats.EDI.inProgress,
+  EDIBTC:  d => d.stats.EDI.blocked,
+  EDINSTC: d => d.stats.EDI.notStarted,
+  EDIB:    d => (d.bugs?.EDI ?? []).length,
 
 };
