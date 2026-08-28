@@ -251,7 +251,7 @@ export const VARIABLE_MAP = {
   EDIB:    d => (d.bugs?.EDI ?? []).length,
 
   // ── AI-refreshed narrative sentences (populated by extensions/ai-narrative.js) ──
-  // Blank if ANTHROPIC_API_KEY isn't set or the AI call fails — see that file.
+  // Blank unless ai-narrative-input.json exists (written by a live agent run) — see that file.
   AI_OVERALL_STATUS:        d => d._aiNarratives?.overallStatus ?? '',
   AI_PDM_ITERATION_UPDATE:  d => d._aiNarratives?.pdmIterationUpdate ?? '',
   AI_PDM_DEFECT_SUMMARY:    d => d._aiNarratives?.pdmDefectSummary ?? '',

@@ -249,16 +249,9 @@ async function main() {
 
   printDataSnapshot(data);
 
-  // Run AI extensions first — they populate data._aiSummary / data._aiNarratives
-  // for use by ppt/excel. ai-narrative runs whenever ppt output is requested,
-  // since the template's {{AI_...}} tokens live in the ppt deck.
-  const aiIdx = OUTPUTS.indexOf('ai-summary');
-  if (aiIdx !== -1) {
-    const aiExt = await import('./extensions/ai-summary.js');
-    await aiExt.generate(data);
-    OUTPUTS.splice(aiIdx, 1); // prevent running again below
-  }
-
+  // Run the narrative extension first — it populates data._aiNarratives for
+  // ppt.js, whenever ppt output is requested, since the template's
+  // {{AI_...}} tokens live in the ppt deck.
   if (OUTPUTS.includes('ppt')) {
     const narrativeExt = await import('./extensions/ai-narrative.js');
     await narrativeExt.generate(data);

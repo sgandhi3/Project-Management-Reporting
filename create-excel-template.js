@@ -135,22 +135,6 @@ function buildSummary(wb) {
 
   r++; // blank
 
-  // AI Summary section
-  const aiLabel = ws.getCell(`A${r}`);
-  aiLabel.value = 'AI SUMMARY';
-  aiLabel.font  = font(true, 13, ACCENT.slice(2));
-  r++;
-
-  const aiCell = ws.getCell(`A${r}`);
-  aiCell.value = '{{AISummary}}';
-  aiCell.font  = font(false, 11);
-  aiCell.fill  = fill(HEADER_FILL);
-  aiCell.border = border();
-  aiCell.alignment = { wrapText: true, vertical: 'top' };
-  ws.mergeCells(`A${r}:F${r}`);
-  ws.getRow(r).height = 80;
-  r += 2;
-
   // Notes
   const note = ws.getCell(`A${r}`);
   note.value = 'Tokens in {{ }} are replaced automatically. Add charts below referencing the "By Workstream" and "Sub-Suites" sheets.';
@@ -369,7 +353,6 @@ function buildChartsGuide(wb) {
     '  {{PassRate}}        — overall pass rate %',
     '  {{TotalNotStarted}} — consolidated not-started count',
     '  {{TotalInProgress}} — consolidated in-progress count',
-    '  {{AISummary}}       — AI-generated executive summary (if ai-summary extension enabled)',
     '',
     'Add any custom {{TOKEN}} to the Summary sheet and map it in the Variables tab.',
     '',

@@ -17,7 +17,7 @@ gather-data.js          ← fetches stats + bugs from ADO or Jira
      │
      ├── extensions/ppt.js         ← fills {{tokens}} in your .pptx template
      ├── extensions/excel.js       ← fills {{tokens}} in your .xlsx template
-     ├── extensions/ai-summary.js  ← calls Claude to write a status summary
+     ├── extensions/ai-narrative.js ← fills {{AI_...}} narrative tokens from an agent-written override
      └── extensions/sharepoint.js  ← uploads output to SharePoint
 ```
 
@@ -228,12 +228,6 @@ You can add, edit, or remove tokens from the UI (Settings → Variable Mappings)
 | `{{EDIFP}}` | Fail % |
 | `{{EDIEP}}` | Execution % |
 
-### AI Summary
-
-| Token | Description |
-|---|---|
-| `{{AISummary}}` | The full AI-generated status summary text |
-
 ---
 
 ## Test execution statuses
@@ -300,37 +294,19 @@ Token expressions have access to the full data object. Here's what's available:
 | `d.bugsTotal` | Total open bugs across all workstreams |
 | `d.bugsBySeverity['1 - Critical']` | Count of Critical bugs |
 | `d.bugsByPriority['1']` | Count of P1 bugs |
-| `d._aiSummary` | AI-generated summary text (if ai-summary ran) |
 | `d._aiNarratives.overallStatus` | AI-refreshed narrative sentence (see AI Narrative Refresh below) |
 
 Replace `PDM` with any workstream name. Sub-suite paths use the exact breadcrumb string from ADO.
 
 ---
 
-## AI Summary
+## Narrative Refresh
 
-Add `ai-summary` to the output formats (UI → Settings, or `OUTPUT_FORMAT=ai-summary,ppt` in `.env`) and set your `ANTHROPIC_API_KEY`.
+The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list).
 
-Configure the AI from the **AI tab** in the UI:
-- **System prompt** — sets the AI's role and tone
-- **User prompt suffix** — appended to the data block sent to Claude
-- **Context file** — upload a CSV or text file with project notes; the AI includes it in the prompt
-- **Save to file** — toggle whether the summary is written to `Summary_YYYY-MM-DD.txt`
+**These tokens are only ever filled in one way: an agent-written override.** If `ai-narrative-input.json` exists in the project root, its values are used verbatim, key by key. The scheduled task writes this itself: it runs `node gather-data.js --narrative-data` to get the full current data (including complete defect lists), reads it with its own judgment (it's already a live Claude Code session, so this needs no separate API key or billing), and writes real sentences — grounded in the data, no invented facts, and never naming an individual defect owner. See the task's prompt (`~/.claude/scheduled-tasks/mmo-weekly-report-friday/SKILL.md`) for the exact instructions it follows.
 
-The summary is also injected into PPT/Excel via the `{{AISummary}}` token.
-
----
-
-## Narrative Refresh (no API key needed)
-
-The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list) that get rewritten from that week's actual ADO data every time the report runs — no manual editing, and no external API call.
-
-There are two ways the sentences get filled in, checked per-key in this order:
-
-1. **Agent-written override** — if `ai-narrative-input.json` exists in the project root, its values are used verbatim. The Friday scheduled task writes this itself: it runs `node gather-data.js --preview` to get the current data, reads it with its own judgment (it's already a live Claude Code session, so this needs no separate API key or billing), and writes real sentences — grounded in the data, no invented facts, and never naming an individual defect owner. See the task's prompt (`~/.claude/scheduled-tasks/mmo-weekly-report-friday/SKILL.md`) for the exact instructions it follows.
-2. **Rule-based fallback** — for any key without an override (e.g. a plain `npm run generate` with no agent involved, or a key the agent skipped), `extensions/ai-narrative.js` computes it from plain thresholds and keyword matching: status labels (on track / at risk / off track) from pass rate and blockers among executed test cases, defect themes from keyword categorization of titles. No names are ever included by either path. Tune `classifyStatus`'s thresholds or `CATEGORY_KEYWORDS` in that file if the fallback's judgment doesn't match how your program defines these labels.
-
-This runs automatically whenever `ppt` is in the output formats. Neither path calls the Anthropic API or needs `ANTHROPIC_API_KEY` — that's only used by the separate AI Summary feature below.
+There is deliberately **no generated fallback text**. A plain `npm run generate` with no agent involved (or any key the agent didn't write) leaves that `{{AI_...}}` token blank in the deck. This runs automatically whenever `ppt` is in the output formats.
 
 If you retire the template and rebuild `temp2.pptx` from scratch, re-run `node scripts/apply-ai-narrative-tokens.js` to re-tokenize the new file's hardcoded sentences (edit the `TARGETS` list in that script first to match the new wording).
 
@@ -365,7 +341,7 @@ Delete the placeholder and retype it from scratch in one pass without changing f
 Check the suite ID and area path in the UI (Credentials tab). For ADO, the area path must match exactly what's in Project Settings → Area Paths. Try running with `DEBUG=true` to print the raw queries.
 
 **`Unknown OUTPUT_FORMAT` error**
-The format name must match a file in `extensions/`. Available: `ppt`, `excel`, `ai-summary`, `sharepoint`.
+The format name must match a file in `extensions/`. Available: `ppt`, `excel`, `sharepoint`.
 
 **401 error (ADO)**
 Your PAT is expired or missing scopes. Generate a new one at `https://dev.azure.com/{org}/_usersSettings/tokens` with Read access for Work Items and Test Management.
