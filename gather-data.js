@@ -240,6 +240,7 @@ async function main() {
   if (args.includes('--narrative-data')) {
     process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
       stats: data.stats,
+      subStats: data.subStats,
       consolidatedData: data.consolidatedData,
       bugs: data.bugs,
     }) + '\n');
