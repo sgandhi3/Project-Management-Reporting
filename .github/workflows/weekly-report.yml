@@ -47,3 +47,13 @@ jobs:
           name: MMO-Report-${{ github.run_id }}
           path: report.pptx
           retention-days: 30
+
+      - name: Send notification email
+        env:
+          OUTLOOK_USER: ${{ secrets.OUTLOOK_USER }}
+          OUTLOOK_PASS: ${{ secrets.OUTLOOK_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: node scripts/send-email.js
