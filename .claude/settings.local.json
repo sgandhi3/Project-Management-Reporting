@@ -46,7 +46,15 @@
       "Bash(python3 /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/fb2dbfb7-ea51-4f7e-86af-7a4bca3d4d7d/scratchpad/build_excel.py)",
       "Bash(python3 /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/fb2dbfb7-ea51-4f7e-86af-7a4bca3d4d7d/scratchpad/parse_defects.py)",
       "Bash(node --env-file=.env /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/6968b606-132b-49b9-835d-f75d7b663cfd/scratchpad/export_open_bugs.mjs)",
-      "Bash(node --env-file=.env /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/6968b606-132b-49b9-835d-f75d7b663cfd/scratchpad/export_two_bugs.mjs)"
+      "Bash(node --env-file=.env /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/6968b606-132b-49b9-835d-f75d7b663cfd/scratchpad/export_two_bugs.mjs)",
+      "Bash(gh secret *)",
+      "Bash(gh auth *)",
+      "Bash(git check-ignore *)",
+      "Bash(node --input-type=module -e ' *)",
+      "Bash(cp temp2.pptx /tmp/test-temp2.pptx)",
+      "Bash(node scripts/apply-ai-narrative-tokens.js \"/private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/4bfae4f2-459b-45a7-bcaf-a3754e2a749f/scratchpad/test-temp2.pptx\")",
+      "Bash(node scripts/apply-ai-narrative-tokens.js /private/tmp/claude-501/-Users-sgandhi3-Desktop-mmo-report/4bfae4f2-459b-45a7-bcaf-a3754e2a749f/scratchpad/test-temp2.pptx)",
+      "Bash(node gather-data.js --narrative-data)"
     ]
   }
 }
