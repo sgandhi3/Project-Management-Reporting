@@ -12,33 +12,25 @@
   "workstreams": [
     {
       "name": "PDM",
-      "planId": "20140",
-      "sitSuiteId": "24811",
-      "areaPath": "HRP\\Testing\\Provider\\PDM",
-      "projectKey": "",
-      "testCycleKey": ""
-    },
-    {
-      "name": "Benefits",
-      "planId": "20140",
-      "sitSuiteId": "23737",
-      "areaPath": "HRP\\Testing\\Benefits",
+      "planId": "10",
+      "sitSuiteId": "64",
+      "areaPath": "Agent-report\\PDM",
       "projectKey": "",
       "testCycleKey": ""
     },
     {
       "name": "Enrollment",
-      "planId": "20140",
-      "sitSuiteId": "20167",
-      "areaPath": "HRP\\Testing\\Enrollment",
+      "planId": "10",
+      "sitSuiteId": "12",
+      "areaPath": "Agent-report\\Enrollment",
       "projectKey": "",
       "testCycleKey": ""
     },
     {
       "name": "EDI",
-      "planId": "20140",
-      "sitSuiteId": "20162",
-      "areaPath": "HRP\\Testing\\EDI",
+      "planId": "10",
+      "sitSuiteId": "38",
+      "areaPath": "Agent-report\\EDI",
       "projectKey": "",
       "testCycleKey": ""
     }

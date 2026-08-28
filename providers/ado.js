@@ -72,18 +72,24 @@ async function fetchSuiteTestPoints(planId, suiteId) {
   return all;
 }
 
+// Different ADO org/projects use different outcome strings for "hasn't
+// actually been run yet" — this repo has seen at least 'notExecuted' (one
+// instance) and 'Active' (another). Rather than maintain a whitelist of every
+// org's idle-state spelling (fragile — the next org will use a third string),
+// only whitelist the outcomes that unambiguously mean the point WAS run, and
+// default everything else to notStarted. Safer direction for a status report:
+// undercounting "executed" is far less misleading than overcounting it.
 function tallyOutcomes(points) {
   let planned = 0, executed = 0, passed = 0, failed = 0, notStarted = 0, inProgress = 0, blocked = 0, paused = 0;
   for (const pt of points) {
     planned++;
     const o = (pt.results?.outcome || '').toLowerCase();
-    if      (o === 'passed')                            { passed++;     executed++; }
-    else if (o === 'failed')                            { failed++;     executed++; }
-    else if (o === 'blocked')                           { blocked++; }
-    else if (o === 'paused')                            { paused++; }
-    else if (o === 'inprogress')                        { inProgress++; executed++; }
-    else if (o && o !== 'none' && o !== 'unspecified')  { executed++; }
-    else                                                { notStarted++; }
+    if      (o === 'passed')     { passed++;     executed++; }
+    else if (o === 'failed')     { failed++;     executed++; }
+    else if (o === 'blocked')    { blocked++; }
+    else if (o === 'paused')     { paused++; }
+    else if (o === 'inprogress') { inProgress++; executed++; }
+    else                          { notStarted++; } // covers 'notExecuted', 'none', 'unspecified', 'active', '', and any other not-yet-run spelling
   }
   return { planned, executed, passed, failed, notStarted, inProgress, blocked, paused };
 }

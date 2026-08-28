@@ -1,5 +1,6 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
 import { WORKSTREAMS, QUERIES, SETTINGS } from './config.js';
+import { VARIABLE_MAP } from './variables.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
 
@@ -143,6 +144,34 @@ async function collectAllData(provider) {
   return data;
 }
 
+// ─── Arithmetic validation ─────────────────────────────────────────────────────
+//
+// Every test-point tally must partition exactly: planned cases fall into
+// exactly one of passed/failed/blocked/paused/inProgress/notStarted, so those
+// six must always sum to planned. A mismatch means the provider is
+// miscategorizing some outcome value (e.g. treating an unrecognized status as
+// executed when it isn't) — this exact bug previously made ADO's literal
+// 'notExecuted' outcome count as executed instead of notStarted. Run this
+// automatically on every invocation so a future miscategorization surfaces
+// immediately instead of silently shipping wrong numbers in the report.
+function validateStats(data) {
+  let ok = true;
+  const check = (label, s) => {
+    if (!s || typeof s.planned !== 'number') return;
+    const sum = s.passed + s.failed + s.blocked + s.paused + s.inProgress + s.notStarted;
+    if (sum !== s.planned) {
+      ok = false;
+      console.warn(`  ⚠  ARITHMETIC MISMATCH — ${label}: planned=${s.planned} but passed(${s.passed})+failed(${s.failed})+blocked(${s.blocked})+paused(${s.paused})+inProgress(${s.inProgress})+notStarted(${s.notStarted})=${sum}`);
+    }
+  };
+  for (const [ws, s] of Object.entries(data.stats || {})) check(ws, s);
+  for (const [ws, paths] of Object.entries(data.subStats || {})) {
+    for (const [path, s] of Object.entries(paths)) check(`${ws} / ${path}`, s);
+  }
+  if (ok) console.log('  ✓ Arithmetic check: every planned count partitions exactly (passed+failed+blocked+paused+inProgress+notStarted)');
+  return ok;
+}
+
 // ─── Data snapshot ────────────────────────────────────────────────────────────
 
 function printDataSnapshot(data) {
@@ -223,6 +252,7 @@ const args = process.argv.slice(2);
 async function main() {
   const provider  = await import(`./providers/${PROVIDER}.js`);
   const data      = await collectAllData(provider);
+  validateStats(data);
 
   // --preview: output data as JSON for the UI Data tab, skip extensions
   if (args.includes('--preview')) {
@@ -237,8 +267,22 @@ async function main() {
   // (id/title/severity/priority/owner/etc.) instead of collapsing them to a
   // count — this is what a narrative-writing agent needs to describe defect
   // themes; skips extensions same as --preview.
+  //
+  // `tokens` is the DECK'S ACTUAL NUMBERS: every non-AI token resolved through
+  // the same VARIABLE_MAP the report itself uses (so e.g. workstreams whose
+  // totals are filtered to a subset of sub-suites show that filtered number
+  // here too, not the raw provider rollup). Write narrative sentences by
+  // quoting these values directly — do not re-derive or re-sum figures from
+  // `stats`/`subStats` yourself; that's what previously let narrative prose
+  // drift from what the deck actually displays.
   if (args.includes('--narrative-data')) {
+    const tokens = {};
+    for (const [key, getter] of Object.entries(VARIABLE_MAP)) {
+      if (key.startsWith('AI_')) continue;
+      try { tokens[key] = getter(data); } catch { tokens[key] = null; }
+    }
     process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
+      tokens,
       stats: data.stats,
       subStats: data.subStats,
       consolidatedData: data.consolidatedData,

@@ -18,16 +18,11 @@ const OVERRIDE_PATH = path.join(process.cwd(), 'ai-narrative-input.json');
 
 const NARRATIVE_KEYS = [
   'overallStatus',
-  'pdmIterationUpdate',
   'pdmDefectSummary',
-  'benefitsUpdate',
-  'pdmCursoryStatus',
-  'benefitsStatus',
-  'enrollmentStatus',
+  'defectTriageStatus',
+  'pdmStatus',
   'ediStatus',
-  'pdmDataQualityDetail1',
-  'pdmDataQualityDetail2',
-  'pdmDataMappingDetail',
+  'enrollmentStatus',
 ];
 
 function loadOverride() {
