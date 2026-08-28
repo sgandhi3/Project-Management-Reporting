@@ -233,6 +233,19 @@ async function main() {
     return;
   }
 
+  // --narrative-data: like --preview, but keeps the full open-bug arrays
+  // (id/title/severity/priority/owner/etc.) instead of collapsing them to a
+  // count — this is what a narrative-writing agent needs to describe defect
+  // themes; skips extensions same as --preview.
+  if (args.includes('--narrative-data')) {
+    process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
+      stats: data.stats,
+      consolidatedData: data.consolidatedData,
+      bugs: data.bugs,
+    }) + '\n');
+    return;
+  }
+
   printDataSnapshot(data);
 
   // Run AI extensions first — they populate data._aiSummary / data._aiNarratives
