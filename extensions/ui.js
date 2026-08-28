@@ -419,67 +419,6 @@ try {
   child.on('error', err => res.status(500).json({ error: err.message }));
 });
 
-// ─── AI Config API ────────────────────────────────────────────────────────────
-
-app.get('/api/ai-config', (_req, res) => {
-  try {
-    const uiConfig = fs.existsSync(UI_CONFIG_PATH)
-      ? JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8'))
-      : {};
-    const ai = uiConfig.settings?.aiSettings || {};
-    res.json({
-      systemPrompt:     ai.systemPrompt     || '',
-      userPromptSuffix: ai.userPromptSuffix || '',
-      contextFile:      ai.contextFile      || '',
-      saveToFile:       ai.saveToFile !== false,
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.put('/api/ai-config', (req, res) => {
-  try {
-    const { systemPrompt, userPromptSuffix, saveToFile } = req.body;
-    const uiConfig = fs.existsSync(UI_CONFIG_PATH)
-      ? JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8'))
-      : {};
-    uiConfig.settings = uiConfig.settings || {};
-    uiConfig.settings.aiSettings = uiConfig.settings.aiSettings || {};
-    if (systemPrompt     !== undefined) uiConfig.settings.aiSettings.systemPrompt     = systemPrompt;
-    if (userPromptSuffix !== undefined) uiConfig.settings.aiSettings.userPromptSuffix = userPromptSuffix;
-    if (saveToFile       !== undefined) uiConfig.settings.aiSettings.saveToFile       = saveToFile;
-    fs.writeFileSync(UI_CONFIG_PATH, JSON.stringify(uiConfig, null, 2));
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-app.post('/api/upload/context', (req, res) => {
-  try {
-    const { filename, content } = req.body;
-    if (!filename || !content) return res.status(400).json({ error: 'filename and content are required' });
-    const ext      = path.extname(filename) || '.txt';
-    const destPath = path.join(projectRoot, `context-uploaded${ext}`);
-    const buf      = Buffer.from(content, 'base64');
-    fs.writeFileSync(destPath, buf);
-
-    // Update ui-config.json to point to the uploaded file
-    const uiConfig = fs.existsSync(UI_CONFIG_PATH)
-      ? JSON.parse(fs.readFileSync(UI_CONFIG_PATH, 'utf8'))
-      : {};
-    uiConfig.settings = uiConfig.settings || {};
-    uiConfig.settings.aiSettings = uiConfig.settings.aiSettings || {};
-    uiConfig.settings.aiSettings.contextFile = destPath;
-    fs.writeFileSync(UI_CONFIG_PATH, JSON.stringify(uiConfig, null, 2));
-
-    res.json({ path: destPath });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // ─── Start ────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
