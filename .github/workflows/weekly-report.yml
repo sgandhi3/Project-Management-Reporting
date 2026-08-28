@@ -1,0 +1,50 @@
+name: Weekly MMO Report
+
+on:
+  schedule:
+    - cron: '0 13 * * 5'   # Every Friday at 1pm UTC = 9am ET
+  workflow_dispatch:         # Also allows manual run from GitHub UI
+
+jobs:
+  generate-and-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate report
+        env:
+          TEST_PROVIDER: ado
+          OUTPUT_FORMAT: pptx
+          PPTX_TEMPLATE: ./temp2.pptx
+          ADO_ORG: ${{ secrets.ADO_ORG }}
+          ADO_PROJECT: ${{ secrets.ADO_PROJECT }}
+          ADO_PAT: ${{ secrets.ADO_PAT }}
+          PLAN_ID: ${{ secrets.PLAN_ID }}
+          SIT_SUITE_PDM: ${{ secrets.SIT_SUITE_PDM }}
+          SIT_SUITE_BENEFITS: ${{ secrets.SIT_SUITE_BENEFITS }}
+          SIT_SUITE_ENROLLMENT: ${{ secrets.SIT_SUITE_ENROLLMENT }}
+          SIT_SUITE_EDI: ${{ secrets.SIT_SUITE_EDI }}
+          PDMAreaPath: ${{ secrets.PDM_AREA_PATH }}
+          BenefitsAreaPath: ${{ secrets.BENEFITS_AREA_PATH }}
+          EnrollmentAreaPath: ${{ secrets.ENROLLMENT_AREA_PATH }}
+          EDIAreaPath: ${{ secrets.EDI_AREA_PATH }}
+        run: node gather-data.js --out report.pptx
+
+      - name: Send email
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          REPORT_PATH: ./report.pptx
+        run: node scripts/send-email.js

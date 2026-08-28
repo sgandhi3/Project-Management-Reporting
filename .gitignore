@@ -1,9 +1,9 @@
-.env
-.DS_Store
-.claude/settings.local.json
 node_modules/
-temp.pptx
-*.pptx
-*.txt
+.env
+# Generated outputs — keep temp2.pptx (template) but ignore reports
+Report_*.pptx
+report.pptx
+new temp.pptx
 *.xlsx
-MMI Oberlin College _For Samir_20260810.xlsm
+~$*
+.DS_Store
