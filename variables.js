@@ -18,6 +18,25 @@ const stat = (d, ws, path, field) => sub(d, ws, path)[field] ?? 0;
 // Sums a field across multiple sub-suite paths
 const sumStat = (d, ws, paths, field) => paths.reduce((acc, p) => acc + stat(d, ws, p, field), 0);
 
+// Benefits active-plan filter:
+// Only count individual benefit plans (depth-2 keys like 'Priority / Signature HMO',
+// 'HMO / Classic HMO NEOH') that have ≥1 execution.
+// Plans with 0 executions are excluded; their planned cases don't count.
+const activeBenSuites = d =>
+  Object.entries(d.subStats?.Benefits ?? {})
+    .filter(([key, s]) => key.split(' / ').length === 2 && s.executed > 0)
+    .map(([, s]) => s);
+
+const activeBenSum = (d, field) =>
+  activeBenSuites(d).reduce((acc, s) => acc + (s[field] ?? 0), 0);
+
+// Grand total across all workstreams, using filtered Benefits
+const activeGrandTotal = (d, field) =>
+  Object.entries(d.stats)
+    .filter(([ws]) => ws !== 'Benefits')
+    .reduce((acc, [, s]) => acc + (s[field] ?? 0), 0)
+  + activeBenSum(d, field);
+
 // PDM Iteration 3 CPIMS has no parent key — sum the four individual sub-suites
 const CPIMS3_PATHS = [
   'Cursory / Iteration 3 / Cpims-Prac',
@@ -33,16 +52,17 @@ export const VARIABLE_MAP = {
     timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: 'numeric',
   }),
 
-  // ── Grand Totals (all workstreams combined) ────────────────────────────────
-  TTC:  d => d.consolidatedData.planned,
-  ETC:  d => d.consolidatedData.executed,
-  EP:   d => pct(d.consolidatedData.executed,  d.consolidatedData.planned),
-  PTC:  d => d.consolidatedData.passed,
-  PP:   d => pct(d.consolidatedData.passed,    d.consolidatedData.executed),
-  FTC:  d => d.consolidatedData.failed,
-  FP:   d => pct(d.consolidatedData.failed,    d.consolidatedData.executed),
-  IPTC: d => d.consolidatedData.inProgress,
-  NSTC: d => d.consolidatedData.notStarted,
+  // ── Grand Totals (Benefits filtered to active folders only) ──────────────
+  // Excludes Benefits sub-suites with 0 executions (e.g. PPO, EGWP) from planned count.
+  TTC:  d => activeGrandTotal(d, 'planned'),
+  ETC:  d => activeGrandTotal(d, 'executed'),
+  EP:   d => pct(activeGrandTotal(d, 'executed'),   activeGrandTotal(d, 'planned')),
+  PTC:  d => activeGrandTotal(d, 'passed'),
+  PP:   d => pct(activeGrandTotal(d, 'passed'),     activeGrandTotal(d, 'executed')),
+  FTC:  d => activeGrandTotal(d, 'failed'),
+  FP:   d => pct(activeGrandTotal(d, 'failed'),     activeGrandTotal(d, 'executed')),
+  IPTC: d => activeGrandTotal(d, 'inProgress'),
+  NSTC: d => activeGrandTotal(d, 'notStarted'),
   TB:   d => d.bugsBySeverity.total,
 
   // ── PDM — Cursory sub-suite (key: 'Cursory') ──────────────────────────────
@@ -162,17 +182,18 @@ export const VARIABLE_MAP = {
   BENEPBNSTC:  d => stat(d, 'Benefits', 'Priority', 'notStarted'),
   BENEPBB:     d => (d.bugs?.Benefits ?? []).length,
 
-  // ── Benefits — 2026 Benefits (all non-Priority suites, computed as total minus Priority) ──
-  BENE26TTC:   d => d.stats.Benefits.planned   - stat(d, 'Benefits', 'Priority', 'planned'),
-  BENE26ETC:   d => d.stats.Benefits.executed  - stat(d, 'Benefits', 'Priority', 'executed'),
-  BENE26EP:    d => pct(d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed'), d.stats.Benefits.planned - stat(d, 'Benefits', 'Priority', 'planned')),
-  BENE26PTC:   d => d.stats.Benefits.passed    - stat(d, 'Benefits', 'Priority', 'passed'),
-  BENE26PP:    d => pct(d.stats.Benefits.passed  - stat(d, 'Benefits', 'Priority', 'passed'),   d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed')),
-  BENE26FTC:   d => d.stats.Benefits.failed    - stat(d, 'Benefits', 'Priority', 'failed'),
-  BENE26FP:    d => pct(d.stats.Benefits.failed  - stat(d, 'Benefits', 'Priority', 'failed'),   d.stats.Benefits.executed - stat(d, 'Benefits', 'Priority', 'executed')),
-  BENE26IPTC:  d => d.stats.Benefits.inProgress - stat(d, 'Benefits', 'Priority', 'inProgress'),
-  BENE26BTC:   d => d.stats.Benefits.blocked   - stat(d, 'Benefits', 'Priority', 'blocked'),
-  BENE26NSTC:  d => d.stats.Benefits.notStarted - stat(d, 'Benefits', 'Priority', 'notStarted'),
+  // ── Benefits — 2026 Benefits (active non-Priority folders only) ──────────
+  // Uses activeBenSum so folders with 0 executions (PPO, EGWP) are excluded.
+  BENE26TTC:   d => activeBenSum(d, 'planned')    - stat(d, 'Benefits', 'Priority', 'planned'),
+  BENE26ETC:   d => activeBenSum(d, 'executed')   - stat(d, 'Benefits', 'Priority', 'executed'),
+  BENE26EP:    d => pct(activeBenSum(d, 'executed') - stat(d, 'Benefits', 'Priority', 'executed'), activeBenSum(d, 'planned') - stat(d, 'Benefits', 'Priority', 'planned')),
+  BENE26PTC:   d => activeBenSum(d, 'passed')     - stat(d, 'Benefits', 'Priority', 'passed'),
+  BENE26PP:    d => pct(activeBenSum(d, 'passed')  - stat(d, 'Benefits', 'Priority', 'passed'),   activeBenSum(d, 'executed') - stat(d, 'Benefits', 'Priority', 'executed')),
+  BENE26FTC:   d => activeBenSum(d, 'failed')     - stat(d, 'Benefits', 'Priority', 'failed'),
+  BENE26FP:    d => pct(activeBenSum(d, 'failed')  - stat(d, 'Benefits', 'Priority', 'failed'),   activeBenSum(d, 'executed') - stat(d, 'Benefits', 'Priority', 'executed')),
+  BENE26IPTC:  d => activeBenSum(d, 'inProgress') - stat(d, 'Benefits', 'Priority', 'inProgress'),
+  BENE26BTC:   d => activeBenSum(d, 'blocked')    - stat(d, 'Benefits', 'Priority', 'blocked'),
+  BENE26NSTC:  d => activeBenSum(d, 'notStarted') - stat(d, 'Benefits', 'Priority', 'notStarted'),
   BENE26B:     d => 0,
 
   // ── Benefits — Benefit type breakdown (Priority sub-suites) ───────────────
