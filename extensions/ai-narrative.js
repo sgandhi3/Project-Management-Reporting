@@ -1,22 +1,17 @@
-// AI Narrative Refresh extension
+// Narrative Refresh extension — no external API, no API key required.
 //
 // The .pptx template has several free-text status sentences (executive summary
 // bullets, per-workstream "Overall ... testing is On Track/At Risk ..." lines,
 // and PDM defect-detail cells) that go stale week to week — hardcoded dates,
-// counts, and plan names. This extension asks Claude to rewrite each one from
-// this week's actual data and stores the results on `data._aiNarratives`,
-// which variables.js exposes as {{AI_...}} tokens for extensions/ppt.js to
-// substitute — the same pattern ai-summary.js uses for data._aiSummary.
+// counts, and plan names. This extension composes each one fresh from this
+// week's actual ADO data using plain rules (status thresholds, defect counts,
+// top owner, keyword-based categorization) and stores the results on
+// `data._aiNarratives`, which variables.js exposes as {{AI_...}} tokens for
+// extensions/ppt.js to substitute.
 //
-// Config (via .env): ANTHROPIC_API_KEY, SUMMARY_NOTES_FILE / SUMMARY_NOTES_URL
-// (same optional context source ai-summary.js uses, for any qualitative detail
-// — e.g. named root causes — that isn't present in the raw ADO fields).
-//
-// If ANTHROPIC_API_KEY is missing, or the API call fails, every {{AI_...}}
-// token falls back to an empty string rather than blocking report generation.
-
-import Anthropic from '@anthropic-ai/sdk';
-import { readAiSettings, fetchNotes } from './_ai-shared.js';
+// The status thresholds and category keywords below are judgment calls —
+// tune them for your program if "on track" / "at risk" / "off track" should
+// mean something different for you.
 
 const NARRATIVE_KEYS = [
   'overallStatus',
@@ -33,124 +28,149 @@ const NARRATIVE_KEYS = [
 ];
 
 function pct(n, d) { return d ? Math.round((n / d) * 100) : 0; }
+function plural(n, word) { return `${n} ${word}${n === 1 ? '' : 's'}`; }
 
-function workstreamLine(name, s) {
-  if (!s) return `${name}: no data`;
-  return `${name} — planned ${s.planned}, executed ${s.executed} (${pct(s.executed, s.planned)}%), `
-    + `passed ${s.passed} (${pct(s.passed, s.executed)}% of executed), failed ${s.failed}, `
-    + `blocked ${s.blocked ?? 0}, in progress ${s.inProgress}, not started ${s.notStarted}`;
+// ─── Status judgment ───────────────────────────────────────────────────────
+// Judged on pass rate and blockers among what's been executed so far, NOT on
+// how much of the plan has been executed — low volume early in a cycle isn't
+// itself trouble. Tune these thresholds to match how your program defines
+// the labels; this is a rough proxy for what used to be a human judgment call.
+function classifyStatus(s) {
+  if (!s || !s.executed) return 'not yet started';
+  const passPct = pct(s.passed, s.executed);
+  if ((s.blocked ?? 0) > 0 || passPct < 50) return 'off track';
+  if (passPct < 85 || s.failed > 0) return 'at risk';
+  return 'on track';
 }
 
-function bugLines(bugs) {
-  if (!bugs?.length) return '  (none open)';
-  return bugs.map(b => `  #${b.id} [${b.severity || 'Unknown'}/${b.priority || '—'}] "${b.title}" — owner: ${b.owner}, state: ${b.state}`).join('\n');
+// ─── Defect helpers ──────────────────────────────────────────────────────────
+
+function topOwner(bugs) {
+  const counts = {};
+  for (const b of bugs) counts[b.owner] = (counts[b.owner] || 0) + 1;
+  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  return sorted[0]?.[0] || null;
 }
 
-function buildDataBlock(data) {
-  const lines = [];
-  lines.push('TEST EXECUTION BY WORKSTREAM');
-  for (const [ws, s] of Object.entries(data.stats)) lines.push(workstreamLine(ws, s));
-  lines.push('');
-
-  const pdmBugs        = data.bugs?.PDM ?? [];
-  const benefitsBugs   = data.bugs?.Benefits ?? [];
-  const enrollmentBugs = data.bugs?.Enrollment ?? [];
-  const ediBugs        = data.bugs?.EDI ?? [];
-  const pdmHigh   = pdmBugs.filter(b => b.severity === '2 - High' || b.severity === '1 - Critical');
-  const pdmMedium = pdmBugs.filter(b => b.severity === '3 - Medium');
-
-  lines.push('OPEN DEFECTS');
-  lines.push(`PDM: ${pdmBugs.length} total (${pdmHigh.length} critical/high, ${pdmMedium.length} medium)`);
-  lines.push(bugLines(pdmBugs));
-  lines.push(`Benefits: ${benefitsBugs.length} total`);
-  lines.push(bugLines(benefitsBugs));
-  lines.push(`Enrollment: ${enrollmentBugs.length} total`);
-  lines.push(bugLines(enrollmentBugs));
-  lines.push(`EDI: ${ediBugs.length} total`);
-  lines.push(bugLines(ediBugs));
-  lines.push('');
-
-  lines.push('PDM CRITICAL/HIGH SEVERITY DEFECTS (for the "Data Quality" detail cell)');
-  lines.push(bugLines(pdmHigh));
-  lines.push('');
-  lines.push('PDM MEDIUM SEVERITY DEFECTS (for the "Data Mapping" detail cell)');
-  lines.push(bugLines(pdmMedium));
-
-  return lines.join('\n');
+// Keyword-based categorization of defect titles — best-effort, not exact.
+const CATEGORY_KEYWORDS = [
+  ['data quality',  ['invalid', 'missing', 'incorrect', 'mismatch', 'duplicate', 'bad data']],
+  ['data mapping',  ['mapping', 'map', 'roster', 'crosswalk', 'cross-walk']],
+  ['configuration', ['config', 'setup', 'setting', 'benefit provision']],
+  ['integration',   ['integration', 'interface', 'edifecs', 'edi ']],
+];
+function categorize(title) {
+  const t = (title || '').toLowerCase();
+  for (const [cat, kws] of CATEGORY_KEYWORDS) {
+    if (kws.some(k => t.includes(k))) return cat;
+  }
+  return 'other';
 }
 
-const SYSTEM_PROMPT = `You are a senior QA program manager updating a weekly SIT (System Integration Testing) status deck. You rewrite specific status sentences using only the data given to you — you never invent dates, counts, names, or root causes that aren't in the data or notes provided. When a category has zero relevant items, say so plainly instead of fabricating detail.`;
+function categoryBreakdown(bugs) {
+  const counts = {};
+  for (const b of bugs) counts[categorize(b.title)] = (counts[categorize(b.title)] || 0) + 1;
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
 
-function buildUserPrompt(dataBlock, notesBlock, todayLabel) {
-  return `Today's date for the report: ${todayLabel}
+function defectDetailSentence(bugs, severityLabel) {
+  if (!bugs.length) return `No open ${severityLabel} PDM defects at this time.`;
+  const cats  = categoryBreakdown(bugs);
+  const owner = topOwner(bugs);
+  const catText = cats.map(([c, n]) => `${plural(n, 'defect')} related to ${c}`).join(', ');
+  return `${plural(bugs.length, 'open ' + severityLabel + ' PDM defect')} (${catText})`
+    + (owner ? `, the largest share owned by ${owner}.` : '.');
+}
 
-${dataBlock}
-${notesBlock}
----
+// ─── Sentence builders ────────────────────────────────────────────────────────
 
-Rewrite the following status sentences/cells for this week's deck, using ONLY the data above (and the notes, if any, for qualitative context like named root causes or owners). Each one replaces a specific hardcoded sentence in the deck that is now out of date. Match the length and tone of a typical entry (1-3 sentences, direct, professional, present the facts plainly — do not editorialize beyond what "on track / at risk / off track / behind plan" the data supports).
+function buildOverallStatus(data) {
+  const entries    = Object.entries(data.stats);
+  const started    = entries.filter(([, s]) => s.executed > 0).sort((a, b) => b[1].executed - a[1].executed);
+  const notStarted = entries.filter(([, s]) => !s.executed).map(([n]) => n);
+  const c = data.consolidatedData;
+  const status = classifyStatus(c);
+  const overallPassPct = pct(c.passed, c.executed);
 
-Guidance for the on track / at risk / off track / behind plan judgment: "on track" = execution proceeding with no major blockers and pass rate healthy; "at risk" = meaningful defects or slippage but recoverable; "off track" / "behind plan" = execution stalled, blocked, or materially behind. Base the call on the executed/passed/failed/blocked numbers given.
+  let sentence = `Overall, SIT execution is ${status}, with ${c.executed} of ${c.planned} planned test cases executed`
+    + (c.executed ? ` (${overallPassPct}% pass rate).` : '.');
 
-Return STRICT JSON only, with exactly these keys (all string values, no markdown, no extra keys, no trailing commentary):
+  if (started.length) {
+    sentence += ` ${started.map(([n]) => n).join(', ')} ${started.length > 1 ? 'lead' : 'leads'} execution progress`;
+    sentence += notStarted.length
+      ? `; ${notStarted.join(', ')} ${notStarted.length > 1 ? 'have' : 'has'} not yet begun executing test cases.`
+      : '.';
+  } else if (notStarted.length) {
+    sentence += ' No workstream has begun executing test cases yet.';
+  }
+  return sentence;
+}
 
-{
-  "overallStatus": "1-2 sentence overall SIT program status across all workstreams",
-  "pdmIterationUpdate": "1 sentence on current PDM iteration progress/timeline",
-  "pdmDefectSummary": "1-2 sentences on the PDM defect situation (types of defects, how many resolved vs remaining, any target date implied by the data)",
-  "benefitsUpdate": "1-2 sentences on Priority Benefits testing progress (pass rate, what's next)",
-  "pdmCursoryStatus": "1-2 sentences: overall PDM Cursory status line, defect count, and who owns them (HE vs MMO) based on defect data/notes",
-  "benefitsStatus": "1-2 sentences: overall Benefits SIT status line and current open defect count/theme",
-  "enrollmentStatus": "1-2 sentences: overall Enrollment SIT status line, defect count, and defect themes",
-  "ediStatus": "1-2 sentences: overall EDI SIT status line, defect count, and defect themes",
-  "pdmDataQualityDetail1": "1 sentence describing the nature of the current PDM critical/high-severity defects (first half of a two-line explanation)",
-  "pdmDataQualityDetail2": "1 sentence continuing that explanation with any second distinct theme, or empty string if there is only one theme",
-  "pdmDataMappingDetail": "1-2 sentences describing the nature of the current PDM medium-severity defects"
-}`;
+function buildPdmIterationUpdate(data) {
+  const s = data.stats.PDM;
+  if (!s || !s.planned) return 'PDM execution data is not yet available.';
+  return `PDM execution is underway, with ${s.executed} of ${s.planned} planned test cases executed to date (${pct(s.executed, s.planned)}%).`;
+}
+
+function buildPdmDefectSummary(data) {
+  const bugs = data.bugs?.PDM ?? [];
+  if (!bugs.length) return 'PDM currently has no open ADO defects.';
+  const high = bugs.filter(b => ['1 - Critical', '2 - High'].includes(b.severity)).length;
+  const med  = bugs.filter(b => b.severity === '3 - Medium').length;
+  const low  = bugs.filter(b => b.severity === '4 - Low').length;
+  return `PDM has ${plural(bugs.length, 'open ADO defect')} (${high} critical/high, ${med} medium, ${low} low severity).`;
+}
+
+function buildBenefitsUpdate(data) {
+  const s = data.stats.Benefits;
+  const bugs = data.bugs?.Benefits ?? [];
+  if (!s || !s.executed) return `Priority Benefits testing has ${plural(bugs.length, 'open defect')}; execution has not yet begun.`;
+  return `Priority Benefits testing has executed ${s.executed} of ${s.planned} test cases (${pct(s.passed, s.executed)}% pass rate), with ${plural(bugs.length, 'open defect')} being worked.`;
+}
+
+function buildWorkstreamStatusLine(label, s, bugs) {
+  const status = classifyStatus(s);
+  const owner  = topOwner(bugs);
+  let sentence = `Overall ${label} testing is ${status}, with ${plural(bugs.length, 'open defect')}`;
+  if (bugs.length) {
+    const cats = categoryBreakdown(bugs);
+    sentence += ` (primarily ${cats[0][0]})`;
+    if (owner) sentence += `, largest share owned by ${owner}`;
+  }
+  return sentence + '.';
 }
 
 export async function generate(data) {
   data._aiNarratives = data._aiNarratives || {};
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('\n❌  ANTHROPIC_API_KEY not set — skipping AI narrative refresh (AI_* tokens will be blank).');
-    return;
-  }
+  console.log('\nRefreshing status sentences from current data...');
 
-  console.log('\nRefreshing AI-generated status sentences...');
+  const pdmBugs = data.bugs?.PDM ?? [];
+  const pdmHigh   = pdmBugs.filter(b => b.severity === '1 - Critical' || b.severity === '2 - High');
+  const pdmMedLow = pdmBugs.filter(b => b.severity === '3 - Medium' || b.severity === '4 - Low');
 
-  const aiSettings = readAiSettings();
-  const notes      = await fetchNotes(aiSettings);
-  const notesBlock = notes ? `\nADDITIONAL NOTES / PROJECT CONTEXT\n${'─'.repeat(60)}\n${notes.slice(0, 8000)}\n` : '';
-  const dataBlock  = buildDataBlock(data);
-  const todayLabel = new Date().toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
-  });
+  // The template has two lines for the critical/high-severity detail cell —
+  // line 1 states the count/category breakdown, line 2 names the top owner.
+  const dqCats  = categoryBreakdown(pdmHigh);
+  const dqOwner = topOwner(pdmHigh);
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  data._aiNarratives.overallStatus         = buildOverallStatus(data);
+  data._aiNarratives.pdmIterationUpdate    = buildPdmIterationUpdate(data);
+  data._aiNarratives.pdmDefectSummary      = buildPdmDefectSummary(data);
+  data._aiNarratives.benefitsUpdate        = buildBenefitsUpdate(data);
+  data._aiNarratives.pdmCursoryStatus      = buildWorkstreamStatusLine('PDM Cursory Review', data.stats.PDM, pdmBugs);
+  data._aiNarratives.benefitsStatus        = buildWorkstreamStatusLine('Benefits SIT', data.stats.Benefits, data.bugs?.Benefits ?? []);
+  data._aiNarratives.enrollmentStatus      = buildWorkstreamStatusLine('Enrollment SIT', data.stats.Enrollment, data.bugs?.Enrollment ?? []);
+  data._aiNarratives.ediStatus             = buildWorkstreamStatusLine('EDI SIT', data.stats.EDI, data.bugs?.EDI ?? []);
+  data._aiNarratives.pdmDataQualityDetail1 = pdmHigh.length
+    ? `${plural(pdmHigh.length, 'critical/high-severity PDM defect')} open (${dqCats.map(([c, n]) => `${plural(n, 'defect')} related to ${c}`).join(', ')}).`
+    : 'No open critical/high-severity PDM defects at this time.';
+  data._aiNarratives.pdmDataQualityDetail2 = (pdmHigh.length && dqOwner) ? `Largest share owned by ${dqOwner}.` : '';
+  data._aiNarratives.pdmDataMappingDetail  = defectDetailSentence(pdmMedLow, 'medium/low-severity');
 
-  let parsed;
-  try {
-    const response = await client.messages.create({
-      model:      'claude-sonnet-4-5',
-      max_tokens: 1024,
-      system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: buildUserPrompt(dataBlock, notesBlock, todayLabel) }],
-    });
-    const text = response.content[0].text.trim();
-    const jsonText = text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '');
-    parsed = JSON.parse(jsonText);
-  } catch (e) {
-    console.error(`\n❌  AI narrative generation failed — ${e.message.split('\n')[0]} (AI_* tokens will be blank).`);
-    return;
-  }
-
+  console.log('Refreshed sentences:');
   for (const key of NARRATIVE_KEYS) {
-    data._aiNarratives[key] = typeof parsed[key] === 'string' ? parsed[key].trim() : '';
-  }
-
-  console.log('AI narrative sentences:');
-  for (const key of NARRATIVE_KEYS) {
-    console.log(`  ${key}: ${data._aiNarratives[key] ? data._aiNarratives[key].slice(0, 90) + (data._aiNarratives[key].length > 90 ? '…' : '') : '(empty)'}`);
+    const v = data._aiNarratives[key];
+    console.log(`  ${key}: ${v ? v.slice(0, 90) + (v.length > 90 ? '…' : '') : '(empty)'}`);
   }
 }

@@ -321,11 +321,13 @@ The summary is also injected into PPT/Excel via the `{{AISummary}}` token.
 
 ---
 
-## AI Narrative Refresh
+## Narrative Refresh (no API key needed)
 
-The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list) that get rewritten from that week's actual ADO data every time the report runs — no manual editing needed.
+The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list) that get rewritten from that week's actual ADO data every time the report runs — no manual editing, and no external API call.
 
-This runs automatically whenever `ppt` is in the output formats and `ANTHROPIC_API_KEY` is set; if the key is missing or the API call fails, those tokens are just left blank rather than blocking the report. It reads the same optional context file/URL as AI Summary (`SUMMARY_NOTES_FILE` / `SUMMARY_NOTES_URL`) for any qualitative detail — named root causes, owners, etc. — that isn't in the raw ADO fields.
+Sentences are composed with plain rules: status labels (on track / at risk / off track) come from pass rate and blocker thresholds among executed test cases, defect detail lines come from real counts, top owners, and keyword-based categorization of defect titles. Read `extensions/ai-narrative.js` and tune `classifyStatus`'s thresholds or `CATEGORY_KEYWORDS` if they don't match how your program defines those labels — it's an approximation of what used to be a human judgment call, not a guarantee of matching it exactly.
+
+This runs automatically whenever `ppt` is in the output formats. It has nothing to do with `ANTHROPIC_API_KEY` or the separate AI Summary feature below.
 
 If you retire the template and rebuild `temp2.pptx` from scratch, re-run `node scripts/apply-ai-narrative-tokens.js` to re-tokenize the new file's hardcoded sentences (edit the `TARGETS` list in that script first to match the new wording).
 
