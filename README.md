@@ -325,9 +325,12 @@ The summary is also injected into PPT/Excel via the `{{AISummary}}` token.
 
 The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list) that get rewritten from that week's actual ADO data every time the report runs — no manual editing, and no external API call.
 
-Sentences are composed with plain rules: status labels (on track / at risk / off track) come from pass rate and blocker thresholds among executed test cases, defect detail lines come from real counts, top owners, and keyword-based categorization of defect titles. Read `extensions/ai-narrative.js` and tune `classifyStatus`'s thresholds or `CATEGORY_KEYWORDS` if they don't match how your program defines those labels — it's an approximation of what used to be a human judgment call, not a guarantee of matching it exactly.
+There are two ways the sentences get filled in, checked per-key in this order:
 
-This runs automatically whenever `ppt` is in the output formats. It has nothing to do with `ANTHROPIC_API_KEY` or the separate AI Summary feature below.
+1. **Agent-written override** — if `ai-narrative-input.json` exists in the project root, its values are used verbatim. The Friday scheduled task writes this itself: it runs `node gather-data.js --preview` to get the current data, reads it with its own judgment (it's already a live Claude Code session, so this needs no separate API key or billing), and writes real sentences — grounded in the data, no invented facts, and never naming an individual defect owner. See the task's prompt (`~/.claude/scheduled-tasks/mmo-weekly-report-friday/SKILL.md`) for the exact instructions it follows.
+2. **Rule-based fallback** — for any key without an override (e.g. a plain `npm run generate` with no agent involved, or a key the agent skipped), `extensions/ai-narrative.js` computes it from plain thresholds and keyword matching: status labels (on track / at risk / off track) from pass rate and blockers among executed test cases, defect themes from keyword categorization of titles. No names are ever included by either path. Tune `classifyStatus`'s thresholds or `CATEGORY_KEYWORDS` in that file if the fallback's judgment doesn't match how your program defines these labels.
+
+This runs automatically whenever `ppt` is in the output formats. Neither path calls the Anthropic API or needs `ANTHROPIC_API_KEY` — that's only used by the separate AI Summary feature below.
 
 If you retire the template and rebuild `temp2.pptx` from scratch, re-run `node scripts/apply-ai-narrative-tokens.js` to re-tokenize the new file's hardcoded sentences (edit the `TARGETS` list in that script first to match the new wording).
 
