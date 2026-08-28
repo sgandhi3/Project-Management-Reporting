@@ -4,6 +4,7 @@ node_modules/
 Report_*.pptx
 report.pptx
 new temp.pptx
+ai-narrative-input.json
 *.xlsx
 ~$*
 .DS_Store

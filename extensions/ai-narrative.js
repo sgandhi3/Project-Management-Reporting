@@ -4,14 +4,27 @@
 // bullets, per-workstream "Overall ... testing is On Track/At Risk ..." lines,
 // and PDM defect-detail cells) that go stale week to week — hardcoded dates,
 // counts, and plan names. This extension composes each one fresh from this
-// week's actual ADO data using plain rules (status thresholds, defect counts,
-// top owner, keyword-based categorization) and stores the results on
-// `data._aiNarratives`, which variables.js exposes as {{AI_...}} tokens for
-// extensions/ppt.js to substitute.
+// week's actual ADO data and stores the results on `data._aiNarratives`, which
+// variables.js exposes as {{AI_...}} tokens for extensions/ppt.js to substitute.
+//
+// Two sources, per key, in priority order:
+//   1. AGENT-WRITTEN OVERRIDE — if ./ai-narrative-input.json exists (written by
+//      whatever ran gather-data.js — e.g. a Claude Code agent that read the
+//      --preview data and composed real sentences itself, no API key needed
+//      since it's using its own session rather than calling out to a model),
+//      its values are used verbatim, key by key.
+//   2. RULE-BASED FALLBACK — for any key missing from the override (or when
+//      there's no override file at all, e.g. a plain `npm run generate`),
+//      computed here from plain thresholds/keyword matching. No names of
+//      individuals are ever included — only counts and defect themes.
 //
 // The status thresholds and category keywords below are judgment calls —
 // tune them for your program if "on track" / "at risk" / "off track" should
 // mean something different for you.
+import fs   from 'fs';
+import path from 'path';
+
+const OVERRIDE_PATH = path.join(process.cwd(), 'ai-narrative-input.json');
 
 const NARRATIVE_KEYS = [
   'overallStatus',
@@ -44,13 +57,7 @@ function classifyStatus(s) {
 }
 
 // ─── Defect helpers ──────────────────────────────────────────────────────────
-
-function topOwner(bugs) {
-  const counts = {};
-  for (const b of bugs) counts[b.owner] = (counts[b.owner] || 0) + 1;
-  const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  return sorted[0]?.[0] || null;
-}
+// Deliberately no owner/assignee anywhere below — counts and themes only.
 
 // Keyword-based categorization of defect titles — best-effort, not exact.
 const CATEGORY_KEYWORDS = [
@@ -64,22 +71,29 @@ function categorize(title) {
   for (const [cat, kws] of CATEGORY_KEYWORDS) {
     if (kws.some(k => t.includes(k))) return cat;
   }
-  return 'other';
+  return null; // no confident category — omit rather than say "other"
 }
 
+// Named-category breakdown only (drops uncategorized defects from the list —
+// better to say nothing than a meaningless "(primarily other)").
 function categoryBreakdown(bugs) {
   const counts = {};
-  for (const b of bugs) counts[categorize(b.title)] = (counts[categorize(b.title)] || 0) + 1;
+  for (const b of bugs) {
+    const cat = categorize(b.title);
+    if (cat) counts[cat] = (counts[cat] || 0) + 1;
+  }
   return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+}
+
+function categoryClause(bugs) {
+  const cats = categoryBreakdown(bugs);
+  if (!cats.length) return '';
+  return ` (${cats.map(([c, n]) => `${plural(n, 'defect')} related to ${c}`).join(', ')})`;
 }
 
 function defectDetailSentence(bugs, severityLabel) {
   if (!bugs.length) return `No open ${severityLabel} PDM defects at this time.`;
-  const cats  = categoryBreakdown(bugs);
-  const owner = topOwner(bugs);
-  const catText = cats.map(([c, n]) => `${plural(n, 'defect')} related to ${c}`).join(', ');
-  return `${plural(bugs.length, 'open ' + severityLabel + ' PDM defect')} (${catText})`
-    + (owner ? `, the largest share owned by ${owner}.` : '.');
+  return `${plural(bugs.length, 'open ' + severityLabel + ' PDM defect')}${categoryClause(bugs)}.`;
 }
 
 // ─── Sentence builders ────────────────────────────────────────────────────────
@@ -130,14 +144,46 @@ function buildBenefitsUpdate(data) {
 
 function buildWorkstreamStatusLine(label, s, bugs) {
   const status = classifyStatus(s);
-  const owner  = topOwner(bugs);
-  let sentence = `Overall ${label} testing is ${status}, with ${plural(bugs.length, 'open defect')}`;
-  if (bugs.length) {
-    const cats = categoryBreakdown(bugs);
-    sentence += ` (primarily ${cats[0][0]})`;
-    if (owner) sentence += `, largest share owned by ${owner}`;
+  return `Overall ${label} testing is ${status}, with ${plural(bugs.length, 'open defect')}${categoryClause(bugs)}.`;
+}
+
+function computeFallback(data) {
+  const pdmBugs   = data.bugs?.PDM ?? [];
+  const pdmHigh   = pdmBugs.filter(b => b.severity === '1 - Critical' || b.severity === '2 - High');
+  const pdmMedLow = pdmBugs.filter(b => b.severity === '3 - Medium' || b.severity === '4 - Low');
+
+  // Template has two lines for the critical/high-severity detail cell — line 1
+  // states the count/category breakdown, line 2 gives one illustrative example
+  // (defect title only — never a person's name).
+  const exampleTitle = pdmHigh[0]?.title;
+
+  return {
+    overallStatus:         buildOverallStatus(data),
+    pdmIterationUpdate:    buildPdmIterationUpdate(data),
+    pdmDefectSummary:      buildPdmDefectSummary(data),
+    benefitsUpdate:        buildBenefitsUpdate(data),
+    pdmCursoryStatus:      buildWorkstreamStatusLine('PDM Cursory Review', data.stats.PDM, pdmBugs),
+    benefitsStatus:        buildWorkstreamStatusLine('Benefits SIT', data.stats.Benefits, data.bugs?.Benefits ?? []),
+    enrollmentStatus:      buildWorkstreamStatusLine('Enrollment SIT', data.stats.Enrollment, data.bugs?.Enrollment ?? []),
+    ediStatus:             buildWorkstreamStatusLine('EDI SIT', data.stats.EDI, data.bugs?.EDI ?? []),
+    pdmDataQualityDetail1: pdmHigh.length
+      ? `${plural(pdmHigh.length, 'critical/high-severity PDM defect')} open${categoryClause(pdmHigh)}.`
+      : 'No open critical/high-severity PDM defects at this time.',
+    pdmDataQualityDetail2: exampleTitle ? `Example: "${exampleTitle}".` : '',
+    pdmDataMappingDetail:  defectDetailSentence(pdmMedLow, 'medium/low-severity'),
+  };
+}
+
+function loadOverride() {
+  if (!fs.existsSync(OVERRIDE_PATH)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(OVERRIDE_PATH, 'utf8'));
+    console.log(`  Using agent-written sentences from ${OVERRIDE_PATH}`);
+    return parsed;
+  } catch (e) {
+    console.warn(`  ⚠  Could not parse ${OVERRIDE_PATH} — falling back to rule-based sentences (${e.message})`);
+    return {};
   }
-  return sentence + '.';
 }
 
 export async function generate(data) {
@@ -145,28 +191,15 @@ export async function generate(data) {
 
   console.log('\nRefreshing status sentences from current data...');
 
-  const pdmBugs = data.bugs?.PDM ?? [];
-  const pdmHigh   = pdmBugs.filter(b => b.severity === '1 - Critical' || b.severity === '2 - High');
-  const pdmMedLow = pdmBugs.filter(b => b.severity === '3 - Medium' || b.severity === '4 - Low');
+  const override = loadOverride();
+  const fallback = computeFallback(data);
 
-  // The template has two lines for the critical/high-severity detail cell —
-  // line 1 states the count/category breakdown, line 2 names the top owner.
-  const dqCats  = categoryBreakdown(pdmHigh);
-  const dqOwner = topOwner(pdmHigh);
-
-  data._aiNarratives.overallStatus         = buildOverallStatus(data);
-  data._aiNarratives.pdmIterationUpdate    = buildPdmIterationUpdate(data);
-  data._aiNarratives.pdmDefectSummary      = buildPdmDefectSummary(data);
-  data._aiNarratives.benefitsUpdate        = buildBenefitsUpdate(data);
-  data._aiNarratives.pdmCursoryStatus      = buildWorkstreamStatusLine('PDM Cursory Review', data.stats.PDM, pdmBugs);
-  data._aiNarratives.benefitsStatus        = buildWorkstreamStatusLine('Benefits SIT', data.stats.Benefits, data.bugs?.Benefits ?? []);
-  data._aiNarratives.enrollmentStatus      = buildWorkstreamStatusLine('Enrollment SIT', data.stats.Enrollment, data.bugs?.Enrollment ?? []);
-  data._aiNarratives.ediStatus             = buildWorkstreamStatusLine('EDI SIT', data.stats.EDI, data.bugs?.EDI ?? []);
-  data._aiNarratives.pdmDataQualityDetail1 = pdmHigh.length
-    ? `${plural(pdmHigh.length, 'critical/high-severity PDM defect')} open (${dqCats.map(([c, n]) => `${plural(n, 'defect')} related to ${c}`).join(', ')}).`
-    : 'No open critical/high-severity PDM defects at this time.';
-  data._aiNarratives.pdmDataQualityDetail2 = (pdmHigh.length && dqOwner) ? `Largest share owned by ${dqOwner}.` : '';
-  data._aiNarratives.pdmDataMappingDetail  = defectDetailSentence(pdmMedLow, 'medium/low-severity');
+  for (const key of NARRATIVE_KEYS) {
+    const overrideVal = override[key];
+    data._aiNarratives[key] = (typeof overrideVal === 'string' && overrideVal.trim())
+      ? overrideVal.trim()
+      : fallback[key];
+  }
 
   console.log('Refreshed sentences:');
   for (const key of NARRATIVE_KEYS) {
