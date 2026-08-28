@@ -41,10 +41,9 @@ jobs:
           EDIAreaPath: ${{ secrets.EDI_AREA_PATH }}
         run: node gather-data.js --out report.pptx
 
-      - name: Send email
-        env:
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          REPORT_PATH: ./report.pptx
-        run: node scripts/send-email.js
+      - name: Upload report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MMO-Report-${{ github.run_id }}
+          path: report.pptx
+          retention-days: 30
