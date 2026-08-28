@@ -301,6 +301,7 @@ Token expressions have access to the full data object. Here's what's available:
 | `d.bugsBySeverity['1 - Critical']` | Count of Critical bugs |
 | `d.bugsByPriority['1']` | Count of P1 bugs |
 | `d._aiSummary` | AI-generated summary text (if ai-summary ran) |
+| `d._aiNarratives.overallStatus` | AI-refreshed narrative sentence (see AI Narrative Refresh below) |
 
 Replace `PDM` with any workstream name. Sub-suite paths use the exact breadcrumb string from ADO.
 
@@ -317,6 +318,16 @@ Configure the AI from the **AI tab** in the UI:
 - **Save to file** — toggle whether the summary is written to `Summary_YYYY-MM-DD.txt`
 
 The summary is also injected into PPT/Excel via the `{{AISummary}}` token.
+
+---
+
+## AI Narrative Refresh
+
+The `temp2.pptx` template has several free-text status sentences (executive summary bullets, each workstream's "Overall ... testing is On Track/At Risk ..." line, and the PDM defect-detail cells) that used to be hand-typed and went stale week to week. These are now `{{AI_...}}` tokens (see `extensions/ai-narrative.js` for the full list) that get rewritten from that week's actual ADO data every time the report runs — no manual editing needed.
+
+This runs automatically whenever `ppt` is in the output formats and `ANTHROPIC_API_KEY` is set; if the key is missing or the API call fails, those tokens are just left blank rather than blocking the report. It reads the same optional context file/URL as AI Summary (`SUMMARY_NOTES_FILE` / `SUMMARY_NOTES_URL`) for any qualitative detail — named root causes, owners, etc. — that isn't in the raw ADO fields.
+
+If you retire the template and rebuild `temp2.pptx` from scratch, re-run `node scripts/apply-ai-narrative-tokens.js` to re-tokenize the new file's hardcoded sentences (edit the `TARGETS` list in that script first to match the new wording).
 
 ---
 

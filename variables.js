@@ -229,4 +229,18 @@ export const VARIABLE_MAP = {
   EDINSTC: d => d.stats.EDI.notStarted,
   EDIB:    d => (d.bugs?.EDI ?? []).length,
 
+  // ── AI-refreshed narrative sentences (populated by extensions/ai-narrative.js) ──
+  // Blank if ANTHROPIC_API_KEY isn't set or the AI call fails — see that file.
+  AI_OVERALL_STATUS:        d => d._aiNarratives?.overallStatus ?? '',
+  AI_PDM_ITERATION_UPDATE:  d => d._aiNarratives?.pdmIterationUpdate ?? '',
+  AI_PDM_DEFECT_SUMMARY:    d => d._aiNarratives?.pdmDefectSummary ?? '',
+  AI_BENEFITS_UPDATE:       d => d._aiNarratives?.benefitsUpdate ?? '',
+  AI_PDM_CURSORY_STATUS:    d => d._aiNarratives?.pdmCursoryStatus ?? '',
+  AI_BENEFITS_STATUS:       d => d._aiNarratives?.benefitsStatus ?? '',
+  AI_ENROLLMENT_STATUS:     d => d._aiNarratives?.enrollmentStatus ?? '',
+  AI_EDI_STATUS:            d => d._aiNarratives?.ediStatus ?? '',
+  AI_PDM_DQ_DEFECT_DETAIL_1: d => d._aiNarratives?.pdmDataQualityDetail1 ?? '',
+  AI_PDM_DQ_DEFECT_DETAIL_2: d => d._aiNarratives?.pdmDataQualityDetail2 ?? '',
+  AI_PDM_DM_DEFECT_DETAIL:  d => d._aiNarratives?.pdmDataMappingDetail ?? '',
+
 };
