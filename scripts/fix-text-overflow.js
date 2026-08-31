@@ -24,48 +24,65 @@ import PizZip from 'pizzip';
 const TEMPLATE = process.argv[2] || path.join(process.cwd(), 'temp2.pptx');
 
 // Shapes whose text length varies at runtime: token-substituted numbers or
-// AI-narrative sentences. Update this list if new variable-content shapes
-// are added to the template.
-const TARGET_SHAPES = {
-  2: [61, 29, 35, 38, 44, 47, 50], // NarrLeft, Stat1Num..Stat4Num (x2)
-  3: [7],                          // PDM status sentence
-  4: [6],                          // EDI status sentence
-  5: [6],                          // Enrollment status sentence
+// AI-narrative sentences. Matched by name/content rather than hardcoded shape
+// IDs, since IDs shift whenever the template's shapes are edited/reordered —
+// the stat-box names ("Stat1Num" etc.) and the narrative sentence's own
+// wording are what stay stable across template edits.
+const TARGET_PREDICATES = {
+  2: (name, _text) => /^NarrLeft$/.test(name) || /Num$/.test(name), // NarrLeft, Stat1Num..Stat4Num (x2)
+  3: (_name, text) => /planned test cases/i.test(text),             // PDM status sentence
+  4: (_name, text) => /planned test cases/i.test(text),             // EDI status sentence
+  5: (_name, text) => /planned test cases/i.test(text),             // Enrollment status sentence
 };
 
-function fixShape(xml, shapeId) {
-  const idIdx = xml.indexOf(`<p:cNvPr id="${shapeId}"`);
-  if (idIdx === -1) return { xml, changed: false, reason: 'shape not found' };
-  const spStart = xml.lastIndexOf('<p:sp>', idIdx);
-  const spEnd = xml.indexOf('</p:sp>', idIdx) + '</p:sp>'.length;
-  if (spStart === -1 || spEnd === -1) return { xml, changed: false, reason: 'shape boundaries not found' };
-
-  const shapeXml = xml.slice(spStart, spEnd);
-
+function fixShapeSegment(shapeXml) {
   // Self-closing bodyPr with no autofit child: <a:bodyPr .../>
   const selfClosing = shapeXml.match(/<a:bodyPr([^>]*)\/>/);
   // bodyPr with children (e.g. <a:spAutoFit/> or <a:noAutofit/>) already present
   const withChildren = shapeXml.match(/<a:bodyPr([^>]*)>([\s\S]*?)<\/a:bodyPr>/);
 
-  let newShapeXml;
   if (withChildren) {
     const [full, attrs, inner] = withChildren;
     if (inner.includes('<a:normAutofit')) {
-      return { xml, changed: false, reason: 'already normAutofit' };
+      return { seg: shapeXml, changed: false, reason: 'already normAutofit' };
     }
     const newInner = inner.replace(/<a:(spAutoFit|noAutofit)\/>/, '<a:normAutofit/>');
     const finalInner = newInner.includes('<a:normAutofit')
       ? newInner
       : `<a:normAutofit/>${inner}`; // no recognized autofit child — add one
-    newShapeXml = shapeXml.replace(full, `<a:bodyPr${attrs}>${finalInner}</a:bodyPr>`);
+    return { seg: shapeXml.replace(full, `<a:bodyPr${attrs}>${finalInner}</a:bodyPr>`), changed: true };
   } else if (selfClosing) {
     const [full, attrs] = selfClosing;
-    newShapeXml = shapeXml.replace(full, `<a:bodyPr${attrs}><a:normAutofit/></a:bodyPr>`);
-  } else {
-    return { xml, changed: false, reason: 'no bodyPr found' };
+    return { seg: shapeXml.replace(full, `<a:bodyPr${attrs}><a:normAutofit/></a:bodyPr>`), changed: true };
   }
+  return { seg: shapeXml, changed: false, reason: 'no bodyPr found' };
+}
 
-  return { xml: xml.slice(0, spStart) + newShapeXml + xml.slice(spEnd), changed: true };
+// Scans every <p:sp> shape in document order, applying fixShapeSegment to
+// the ones the predicate selects, and rebuilds the slide XML from the
+// original text so unmatched shapes pass through untouched.
+function fixSlide(xml, predicate) {
+  const matches = [];
+  let cursor = 0;
+  let out = '';
+  for (const m of xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)) {
+    const seg = m[0];
+    const cnv = seg.match(/<p:cNvPr id="(\d+)" name="([^"]*)"/);
+    let segToUse = seg;
+    if (cnv) {
+      const [, id, name] = cnv;
+      const text = [...seg.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(x => x[1]).join('');
+      if (predicate(name, text)) {
+        const fixed = fixShapeSegment(seg);
+        matches.push({ id, name, changed: fixed.changed, reason: fixed.reason });
+        if (fixed.changed) segToUse = fixed.seg;
+      }
+    }
+    out += xml.slice(cursor, m.index) + segToUse;
+    cursor = m.index + seg.length;
+  }
+  out += xml.slice(cursor);
+  return { xml: out, matches };
 }
 
 function main() {
@@ -76,21 +93,22 @@ function main() {
   const zip = new PizZip(fs.readFileSync(TEMPLATE, 'binary'));
   let totalChanged = 0, totalSkipped = 0;
 
-  for (const [slide, shapeIds] of Object.entries(TARGET_SHAPES)) {
+  for (const [slide, predicate] of Object.entries(TARGET_PREDICATES)) {
     const name = `ppt/slides/slide${slide}.xml`;
     const file = zip.file(name);
     if (!file) { console.warn(`⚠  ${name} not found in ${TEMPLATE}`); continue; }
 
-    let xml = file.asText();
+    const { xml, matches } = fixSlide(file.asText(), predicate);
     console.log(`slide${slide}:`);
-    for (const shapeId of shapeIds) {
-      const result = fixShape(xml, shapeId);
-      xml = result.xml;
-      if (result.changed) {
-        console.log(`  ✓ shape id=${shapeId} → normAutofit set`);
+    if (matches.length === 0) {
+      console.log('  ⚠ no matching shapes found — template may have changed');
+    }
+    for (const m of matches) {
+      if (m.changed) {
+        console.log(`  ✓ shape id=${m.id} name=${m.name} → normAutofit set`);
         totalChanged++;
       } else {
-        console.log(`  · shape id=${shapeId} — ${result.reason}`);
+        console.log(`  · shape id=${m.id} name=${m.name} — ${m.reason}`);
         totalSkipped++;
       }
     }

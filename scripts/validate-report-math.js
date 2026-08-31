@@ -57,13 +57,45 @@ function extractTables(xml) {
   return tables;
 }
 
-function shapeText(xml, shapeId) {
-  const idIdx = xml.indexOf(`<p:cNvPr id="${shapeId}"`);
-  if (idIdx === -1) return null;
-  const spEnd = xml.indexOf('</p:sp>', idIdx);
-  const seg = xml.slice(idIdx, spEnd);
-  const m = [...seg.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(x => x[1]);
-  return m.join('');
+function allShapes(xml) {
+  const shapes = [];
+  for (const m of xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)) {
+    const cnv = m[0].match(/<p:cNvPr id="(\d+)" name="([^"]*)"/);
+    if (!cnv) continue;
+    const text = [...m[0].matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map(x => x[1]).join('');
+    shapes.push({ id: cnv[1], name: cnv[2], text });
+  }
+  return shapes;
+}
+
+// Stat boxes are identified by their paired label text (e.g. "Total Test
+// Cases", "Passed", "Executed") rather than hardcoded shape IDs, since the
+// template's shape IDs shift whenever the stat-box layout is edited — the
+// label text is the one thing guaranteed to still mean the same thing.
+const STAT_BOX_LABELS = [
+  [/^Total Test Cases/i, 'TTC'],
+  [/^Passed/i, 'PTC'],
+  [/^Failed/i, 'FTC'],
+  [/^Open Defects/i, 'TB'],
+  [/^Executed/i, 'ETC'],
+  [/^In Progress/i, 'IPTC'],
+];
+
+function extractStatBoxes(xml) {
+  const shapes = allShapes(xml);
+  const boxes = { TTC: null, PTC: null, FTC: null, TB: null, ETC: null, IPTC: null };
+  for (let i = 0; i < shapes.length; i++) {
+    if (!/Num$/.test(shapes[i].name)) continue;
+    let label = null;
+    for (let j = i + 1; j < shapes.length; j++) {
+      if (/Num$/.test(shapes[j].name)) break; // next Num with no Lbl in between — unpaired
+      if (/Lbl$/.test(shapes[j].name)) { label = shapes[j].text; break; }
+    }
+    if (label == null) continue;
+    const match = STAT_BOX_LABELS.find(([re]) => re.test(label.trim()));
+    if (match) boxes[match[1]] = num(shapes[i].text);
+  }
+  return boxes;
 }
 
 // ── Slide 2: executive summary ──────────────────────────────────────────────
@@ -81,11 +113,7 @@ for (const row of s2Tables[0]) {
   }
 }
 
-// Stat boxes (ids per temp2.pptx): 29=TTC*, 35=PTC, 38=FTC, 44=TB, 47=ETC, 50=IPTC
-const statBoxes = {
-  TTC: num(shapeText(s2, 29)), PTC: num(shapeText(s2, 35)), FTC: num(shapeText(s2, 38)),
-  TB: num(shapeText(s2, 44)), ETC: num(shapeText(s2, 47)), IPTC: num(shapeText(s2, 50)),
-};
+const statBoxes = extractStatBoxes(s2);
 
 // ── Slides 3–5: detail slides ────────────────────────────────────────────────
 const DETAIL_SLIDES = { 3: 'PDM', 4: 'EDI', 5: 'Enrollment' };
