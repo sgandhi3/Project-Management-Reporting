@@ -282,6 +282,7 @@ async function main() {
       subStats: data.subStats,
       consolidatedData: data.consolidatedData,
       bugs: data.bugs,
+      closedBugs: data.closedBugs,
       _fetchErrors: data._fetchErrors,
     }) + '\n');
     return;
