@@ -5,6 +5,7 @@ Report_*.pptx
 report.pptx
 new temp.pptx
 ai-narrative-input.json
+.gather-cache.json
 *.xlsx
 ~$*
 .DS_Store

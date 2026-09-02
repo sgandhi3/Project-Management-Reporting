@@ -1,4 +1,5 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
+import fs from 'fs';
 import { WORKSTREAMS, QUERIES, SETTINGS } from './config.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
@@ -34,7 +35,7 @@ function groupBy(items, field) {
 async function collectAllData(provider) {
   console.log(`\nFetching data via ${PROVIDER} provider...\n`);
 
-  const data = { stats: {}, subStats: {} };
+  const data = { stats: {}, subStats: {}, _fetchErrors: [] };
   for (const q of QUERIES) {
     data[q.key] = q.scope === 'global' ? [] : {};
   }
@@ -52,8 +53,10 @@ async function collectAllData(provider) {
         data[q.key] = result;
         console.log(`${result.length} found`);
       } catch (e) {
-        console.log(`failed — ${e.message.split('\n')[0]}`);
+        const reason = e.message.split('\n')[0];
+        console.log(`failed — ${reason}`);
         data[q.key] = q.fallback ?? [];
+        data._fetchErrors.push(`${q.label} (global): ${reason}`);
       }
     }
     console.log('');
@@ -71,8 +74,10 @@ async function collectAllData(provider) {
       const s = data.stats[ws.name];
       console.log(`planned=${s.planned} executed=${s.executed} passed=${s.passed} failed=${s.failed}`);
     } catch (e) {
-      console.log(`failed — ${e.message.split('\n')[0]}`);
+      const reason = e.message.split('\n')[0];
+      console.log(`failed — ${reason}`);
       data.stats[ws.name] = { planned: 0, executed: 0, passed: 0, failed: 0, notStarted: 0, inProgress: 0, blocked: 0 };
+      data._fetchErrors.push(`${ws.name} test execution stats: ${reason}`);
     }
 
     if (provider.fetchSubSuiteStats) {
@@ -82,8 +87,10 @@ async function collectAllData(provider) {
         const count = Object.keys(data.subStats[ws.name]).length;
         console.log(count ? Object.keys(data.subStats[ws.name]).join(', ') : 'no sub-suites');
       } catch (e) {
-        console.log(`failed — ${e.message.split('\n')[0]}`);
+        const reason = e.message.split('\n')[0];
+        console.log(`failed — ${reason}`);
         data.subStats[ws.name] = {};
+        data._fetchErrors.push(`${ws.name} sub-suite breakdown: ${reason}`);
       }
     }
 
@@ -96,8 +103,10 @@ async function collectAllData(provider) {
         data[q.key][ws.name] = result;
         console.log(Array.isArray(result) ? `${result.length} found` : JSON.stringify(result));
       } catch (e) {
-        console.log(`failed — ${e.message.split('\n')[0]}`);
+        const reason = e.message.split('\n')[0];
+        console.log(`failed — ${reason}`);
         data[q.key][ws.name] = q.fallback ?? [];
+        data._fetchErrors.push(`${ws.name} ${q.label}: ${reason}`);
       }
     }
 
@@ -138,6 +147,11 @@ async function collectAllData(provider) {
       data[key] = groupBy(allItems, field);
       console.log(`${key}: total=${data[key].total}`);
     }
+  }
+
+  if (data._fetchErrors.length) {
+    console.log(`\n⚠️  ${data._fetchErrors.length} fetch error(s) — affected fields were silently zeroed/emptied above:`);
+    for (const err of data._fetchErrors) console.log(`  - ${err}`);
   }
 
   return data;
@@ -219,10 +233,33 @@ function printDataSnapshot(data) {
 // ─── Entry point ──────────────────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
+const getArgValue = flag => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
 
 async function main() {
-  const provider  = await import(`./providers/${PROVIDER}.js`);
-  const data      = await collectAllData(provider);
+  const useCachePath = getArgValue('--use-cache');
+  let data;
+
+  if (useCachePath) {
+    if (!fs.existsSync(useCachePath)) {
+      console.error(`\n❌  --use-cache file not found: ${useCachePath}`);
+      process.exit(1);
+    }
+    console.log(`\nLoading cached data from ${useCachePath} — skipping ADO fetch entirely.\n`);
+    data = JSON.parse(fs.readFileSync(useCachePath, 'utf8'));
+    if (data._fetchErrors?.length) {
+      console.log(`⚠️  Cached data has ${data._fetchErrors.length} fetch error(s) from when it was collected:`);
+      for (const err of data._fetchErrors) console.log(`  - ${err}`);
+    }
+  } else {
+    const provider = await import(`./providers/${PROVIDER}.js`);
+    data = await collectAllData(provider);
+  }
+
+  const saveCachePath = getArgValue('--save-cache');
+  if (saveCachePath) {
+    fs.writeFileSync(saveCachePath, JSON.stringify(data));
+    console.log(`Data cached → ${saveCachePath}`);
+  }
 
   // --preview: output data as JSON for the UI Data tab, skip extensions
   if (args.includes('--preview')) {
@@ -236,13 +273,16 @@ async function main() {
   // --narrative-data: like --preview, but keeps the full open-bug arrays
   // (id/title/severity/priority/owner/etc.) instead of collapsing them to a
   // count — this is what a narrative-writing agent needs to describe defect
-  // themes; skips extensions same as --preview.
+  // themes; skips extensions same as --preview. Includes _fetchErrors so the
+  // agent knows if any workstream's numbers came back zeroed due to a fetch
+  // failure rather than genuinely being zero.
   if (args.includes('--narrative-data')) {
     process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
       stats: data.stats,
       subStats: data.subStats,
       consolidatedData: data.consolidatedData,
       bugs: data.bugs,
+      _fetchErrors: data._fetchErrors,
     }) + '\n');
     return;
   }
