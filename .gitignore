@@ -1,5 +1,8 @@
 node_modules/
 .env
+# Per-machine Claude Code settings (accumulates tool-permission approvals
+# every run — should never be tracked, was committed by mistake)
+.claude/settings.local.json
 # Generated outputs — keep temp2.pptx (template) but ignore reports
 Report_*.pptx
 report.pptx
