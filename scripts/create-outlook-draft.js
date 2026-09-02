@@ -1,13 +1,25 @@
-// Opens a pre-filled draft in the Microsoft Outlook desktop app — macOS via
-// AppleScript, Windows via PowerShell + Outlook COM automation — with the
-// report attached. The user reviews and sends it manually; this never sends
-// anything itself. Used because this Deloitte O365 tenant has SMTP AUTH
-// disabled tenant-wide (SmtpClientAuthentication is disabled for the
-// Mailbox), so scripts/send-email-local.js's nodemailer/SMTP approach cannot
-// work here at all, regardless of credentials.
+// Opens a pre-filled draft addressed to EMAIL_TO with the report attached.
+// The user reviews and sends it manually — this never sends anything itself.
+// Used because this Deloitte O365 tenant has SMTP AUTH disabled tenant-wide
+// (SmtpClientAuthentication is disabled for the Mailbox), so
+// scripts/send-email-local.js's nodemailer/SMTP approach cannot work here at
+// all, regardless of credentials.
 //
-// Windows requires the classic (COM-automatable) Outlook desktop app — the
-// "new Outlook for Windows" does not expose the same COM interface.
+// Platform behavior:
+//   macOS   — AppleScript automates the classic Outlook desktop app directly,
+//             attachment included.
+//   Windows — tries PowerShell + Outlook COM automation first (attachment
+//             included) — this needs the classic, COM-automatable Outlook
+//             desktop app. If that's not installed (e.g. only the "new
+//             Outlook for Windows" is present, which doesn't expose the same
+//             COM interface), falls back to a `mailto:` link — this opens
+//             whatever the OS's default mail handler is (new Outlook, classic
+//             Outlook, or anything else) pre-filled with To/Subject/Body, and
+//             separately opens File Explorer with the report file selected
+//             so it can be dragged into the draft in one step. No known way
+//             to attach a file via mailto/URI scheme on any platform — that's
+//             blocked by every mail client/browser for security, not an
+//             Outlook-specific limitation.
 //
 // Usage: node scripts/create-outlook-draft.js <path-to-report-file>
 import '../env.js';
@@ -53,7 +65,7 @@ end tell
   await execFileAsync('osascript', ['-e', script]);
 }
 
-async function openDraftWindows() {
+async function openDraftWindowsCom() {
   // PowerShell single-quoted string literals: escape embedded single quotes
   // by doubling them (PowerShell's escape convention, not a backslash).
   const esc = s => s.replace(/'/g, "''");
@@ -70,17 +82,47 @@ $mail.Display()
   await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]);
 }
 
+// Fallback for when there's no COM-automatable Outlook (e.g. only "new
+// Outlook for Windows" is installed, or macOS Outlook AppleScript fails for
+// some other reason). Opens a mailto: draft (recipient/subject/body only —
+// no attachment support exists on any platform via this mechanism) and
+// reveals the report file in the OS file manager so it's a single
+// drag-and-drop to finish.
+async function openMailtoFallback() {
+  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+
+  if (process.platform === 'win32') {
+    await execFileAsync('cmd.exe', ['/c', 'start', '""', mailto]);
+    try {
+      await execFileAsync('explorer.exe', [`/select,${absPath}`]);
+    } catch { /* explorer.exe routinely exits non-zero even on success */ }
+  } else {
+    await execFileAsync('open', [mailto]);
+    try {
+      await execFileAsync('open', ['-R', absPath]);
+    } catch { /* non-fatal — file manager reveal is a convenience, not required */ }
+  }
+
+  console.log(`Couldn't attach automatically — opened a draft addressed to ${to} instead, and revealed ${path.basename(absPath)} in the file manager. Drag it into the draft to finish.`);
+}
+
 try {
   if (process.platform === 'darwin') {
     await openDraftMac();
+    console.log(`Draft opened in Outlook, addressed to ${to}, with ${path.basename(absPath)} attached. Review and send manually.`);
   } else if (process.platform === 'win32') {
-    await openDraftWindows();
+    try {
+      await openDraftWindowsCom();
+      console.log(`Draft opened in Outlook, addressed to ${to}, with ${path.basename(absPath)} attached. Review and send manually.`);
+    } catch (comError) {
+      console.warn(`Outlook COM automation failed (${comError.message.split('\n')[0]}) — likely only "new Outlook for Windows" is installed, which doesn't support this. Falling back to a mailto draft.`);
+      await openMailtoFallback();
+    }
   } else {
-    console.error(`Unsupported platform for Outlook draft automation: ${process.platform} (only macOS and Windows are supported).`);
+    console.error(`Unsupported platform for draft automation: ${process.platform} (only macOS and Windows are supported).`);
     process.exit(1);
   }
-  console.log(`Draft opened in Outlook, addressed to ${to}, with ${path.basename(absPath)} attached. Review and send manually.`);
 } catch (e) {
-  console.error(`Failed to open Outlook draft: ${e.message}`);
+  console.error(`Failed to open a draft: ${e.message}`);
   process.exit(1);
 }
