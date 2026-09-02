@@ -226,8 +226,11 @@ export const VARIABLE_MAP = {
   // once a non-Priority plan went active — see activeBenSum above).
   ACTIVEBENTTC:  d => activeBenSum(d, 'planned'),
   ACTIVEBENETC:  d => activeBenSum(d, 'executed'),
+  ACTIVEBENEP:   d => pct(activeBenSum(d, 'executed'), activeBenSum(d, 'planned')),
   ACTIVEBENPTC:  d => activeBenSum(d, 'passed'),
+  ACTIVEBENPP:   d => pct(activeBenSum(d, 'passed'),   activeBenSum(d, 'executed')),
   ACTIVEBENFTC:  d => activeBenSum(d, 'failed'),
+  ACTIVEBENFP:   d => pct(activeBenSum(d, 'failed'),   activeBenSum(d, 'executed')),
   ACTIVEBENIPTC: d => activeBenSum(d, 'inProgress'),
   ACTIVEBENBTC:  d => activeBenSum(d, 'blocked'),
   ACTIVEBENNSTC: d => activeBenSum(d, 'notStarted'),

@@ -1,9 +1,16 @@
-// MMO-specific: dynamically inserts PPTX table rows for Benefits plans that
-// have started executing but aren't one of the 3 hardcoded "Priority" plans
+// MMO-specific: dynamically inserts PPTX table rows on slide 4 (the Benefits
+// detail slide's per-plan breakdown table) for Benefits plans that have
+// started executing but aren't one of the 3 hardcoded "Priority" plans
 // (Signature HMO, Access PPO, Premium PPO). Plain {{TOKEN}} substitution
 // can't do this — it only fills existing cells, it can't add table rows —
 // so this runs BEFORE the normal substitution pass in extensions/ppt.js,
 // mutating the raw slide XML directly.
+//
+// The executive summary (slide 2) does NOT get a dynamic row — that slide's
+// single Benefits row was retokenized once (see
+// scripts/fix-benefits-grand-total-token.js) to show the combined
+// Priority + active-2026 total directly via ACTIVEBEN* tokens, so it never
+// needs new rows added.
 //
 // This is intentionally isolated here rather than folded into ppt.js/
 // variables.js's generic engine — it's specific to this project's Priority
@@ -12,13 +19,13 @@
 // don't merge it into a shared/generic base for other teams.
 //
 // KNOWN LIMITATION: PowerPoint doesn't auto-reflow a slide when a table
-// grows. The shift/grow thresholds below were measured by hand against the
+// grows. The shift thresholds below were measured by hand against the
 // current temp2.pptx (see git history for the measurements). If the
-// template is redesigned — shapes moved, resized, or added near these
-// tables — these hardcoded values will need re-measuring. This has only
+// template is redesigned — shapes moved, resized, or added near this
+// table — these hardcoded values will need re-measuring. This has only
 // been verified at the XML/text level, not by rendering in PowerPoint —
-// open a generated report and visually check slides 2 and 4 after this
-// runs, especially with more than one or two extra active plans.
+// open a generated report and visually check slide 4 after this runs,
+// especially with more than one or two extra active plans.
 
 import { getExtraActiveBenefitPlans } from '../variables.js';
 
@@ -123,66 +130,15 @@ function injectSlide4(xml, extraPlans, tokenMap) {
   return newXml;
 }
 
-// ── Slide 2: single reconciling "2026 Benefits" row ────────────────────────
-
-function injectSlide2(xml) {
-  const anchorIdx = xml.indexOf('Priority Benefits - SIT');
-  const gfStart = xml.lastIndexOf('<p:graphicFrame>', anchorIdx);
-  const gfEnd = xml.indexOf('</p:graphicFrame>', anchorIdx) + '</p:graphicFrame>'.length;
-  const frame = xml.slice(gfStart, gfEnd);
-
-  const rows = extractRows(frame);
-  const templateRow = rows.find(r => r.includes('Priority Benefits - SIT'));
-  if (!templateRow) {
-    console.warn('  ⚠  _dynamic-benefits: slide2 template row not found — skipping row injection');
-    return xml;
-  }
-
-  const addedHeight = rowHeight(templateRow);
-
-  const newRow = cloneRowWithTokens(templateRow, 'Priority Benefits - SIT', '2026 Benefits - SIT', {
-    '{{BENEPBTTC}}':  '{{BENE26TTC}}',
-    '{{BENEPBETC}}':  '{{BENE26ETC}}',
-    '{{BENEPBEP}}':   '{{BENE26EP}}',
-    '{{BENEPBPTC}}':  '{{BENE26PTC}}',
-    '{{BENEPBPP}}':   '{{BENE26PP}}',
-    '{{BENEPBFTC}}':  '{{BENE26FTC}}',
-    '{{BENEPBFP}}':   '{{BENE26FP}}',
-    '{{BENEPBIPTC}}': '{{BENE26IPTC}}',
-    '{{BENEPBB}}':    '{{BENE26B}}',
-  });
-
-  const insertAt = frame.indexOf(templateRow) + templateRow.length;
-  let newFrame = frame.slice(0, insertAt) + newRow + frame.slice(insertAt);
-  newFrame = growExtent(newFrame, addedHeight);
-
-  let newXml = xml.slice(0, gfStart) + newFrame + xml.slice(gfEnd);
-
-  // Measured against current temp2.pptx: the footnote/legend text starts
-  // around y=6024736; the two background panels behind the text column and
-  // the table both end within ~150000 EMU of the table's original bottom
-  // (~5804454-5945543) and need to grow, not shift.
-  newXml = reflow(newXml, {
-    thresholdY: 6000000,
-    deltaY: addedHeight,
-    growPanelBottomsNear: [5940000, 5945000],
-  });
-
-  return newXml;
-}
-
-// Mutates zip's slide2.xml/slide4.xml in place and adds any new per-plan
-// token getters into effectiveMap. No-op if no plan outside the 3 hardcoded
-// Priority ones has started executing yet.
+// Mutates zip's slide4.xml in place and adds any new per-plan token getters
+// into effectiveMap. No-op if no plan outside the 3 hardcoded Priority ones
+// has started executing yet.
 export function apply(zip, data, effectiveMap) {
   const extraPlans = getExtraActiveBenefitPlans(data);
   if (!extraPlans.length) return;
 
   const slide4 = injectSlide4(zip.file('ppt/slides/slide4.xml').asText(), extraPlans, effectiveMap);
-  const slide2 = injectSlide2(zip.file('ppt/slides/slide2.xml').asText());
-
   zip.file('ppt/slides/slide4.xml', slide4);
-  zip.file('ppt/slides/slide2.xml', slide2);
 
   console.log(`  Dynamic Benefits rows: added ${extraPlans.length} plan(s) — ${extraPlans.map(p => p.label).join(', ')}`);
 }
