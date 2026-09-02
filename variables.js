@@ -43,12 +43,17 @@ const activeBenSuites = d => activeBenEntries(d).map(([, s]) => s);
 const activeBenSum = (d, field) =>
   activeBenSuites(d).reduce((acc, s) => acc + (s[field] ?? 0), 0);
 
+// ADO sub-suite names are inconsistently cased (e.g. "MMEGWP PPO CWRU MAPD").
+// Title-case each word for display in the report regardless of source casing.
+const toTitleCase = s =>
+  s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+
 // Active benefit plans NOT already covered by a hardcoded Priority row —
 // these are what extensions/_dynamic-benefits.js inserts new rows for.
 export const getExtraActiveBenefitPlans = d =>
   activeBenEntries(d)
     .filter(([key]) => !PRIORITY_BENEFIT_KEYS.has(key))
-    .map(([key, s]) => ({ key, label: key.split(' / ').pop(), stats: s }));
+    .map(([key, s]) => ({ key, label: toTitleCase(key.split(' / ').pop()), stats: s }));
 
 // Grand total across all workstreams, using filtered Benefits
 const activeGrandTotal = (d, field) =>
