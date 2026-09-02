@@ -22,13 +22,33 @@ const sumStat = (d, ws, paths, field) => paths.reduce((acc, p) => acc + stat(d, 
 // Only count individual benefit plans (depth-2 keys like 'Priority / Signature HMO',
 // 'HMO / Classic HMO NEOH') that have ≥1 execution.
 // Plans with 0 executions are excluded; their planned cases don't count.
-const activeBenSuites = d =>
+//
+// MMO-specific — the "Priority" plans (Signature HMO, Access PPO, Premium
+// PPO) already have their own template rows; PRIORITY_BENEFIT_KEYS lets
+// extensions/_dynamic-benefits.js find any OTHER plan that's gone active
+// and needs a row inserted for it. See that file for the row-insertion
+// logic; this file only supplies the underlying data filters.
+export const PRIORITY_BENEFIT_KEYS = new Set([
+  'Priority / Signature HMO',
+  'Priority / Access PPO (Premium PPO INN)',
+  'Priority / Premium PPO',
+]);
+
+const activeBenEntries = d =>
   Object.entries(d.subStats?.Benefits ?? {})
-    .filter(([key, s]) => key.split(' / ').length === 2 && s.executed > 0)
-    .map(([, s]) => s);
+    .filter(([key, s]) => key.split(' / ').length === 2 && s.executed > 0);
+
+const activeBenSuites = d => activeBenEntries(d).map(([, s]) => s);
 
 const activeBenSum = (d, field) =>
   activeBenSuites(d).reduce((acc, s) => acc + (s[field] ?? 0), 0);
+
+// Active benefit plans NOT already covered by a hardcoded Priority row —
+// these are what extensions/_dynamic-benefits.js inserts new rows for.
+export const getExtraActiveBenefitPlans = d =>
+  activeBenEntries(d)
+    .filter(([key]) => !PRIORITY_BENEFIT_KEYS.has(key))
+    .map(([key, s]) => ({ key, label: key.split(' / ').pop(), stats: s }));
 
 // Grand total across all workstreams, using filtered Benefits
 const activeGrandTotal = (d, field) =>
@@ -195,6 +215,18 @@ export const VARIABLE_MAP = {
   BENE26BTC:   d => activeBenSum(d, 'blocked')    - stat(d, 'Benefits', 'Priority', 'blocked'),
   BENE26NSTC:  d => activeBenSum(d, 'notStarted') - stat(d, 'Benefits', 'Priority', 'notStarted'),
   BENE26B:     d => 0,
+
+  // ── Benefits — active total (Priority + any active non-Priority plans) ───
+  // Used by slide 4's own Grand Total row (BENEPBTTC alone under-counted
+  // once a non-Priority plan went active — see activeBenSum above).
+  ACTIVEBENTTC:  d => activeBenSum(d, 'planned'),
+  ACTIVEBENETC:  d => activeBenSum(d, 'executed'),
+  ACTIVEBENPTC:  d => activeBenSum(d, 'passed'),
+  ACTIVEBENFTC:  d => activeBenSum(d, 'failed'),
+  ACTIVEBENIPTC: d => activeBenSum(d, 'inProgress'),
+  ACTIVEBENBTC:  d => activeBenSum(d, 'blocked'),
+  ACTIVEBENNSTC: d => activeBenSum(d, 'notStarted'),
+  ACTIVEBENB:    d => (d.bugs?.Benefits ?? []).length,
 
   // ── Benefits — Benefit type breakdown (Priority sub-suites) ───────────────
   BENESIHMTTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'planned'),

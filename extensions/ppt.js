@@ -63,6 +63,17 @@ export async function generate(data) {
     }
   }
 
+  // Project-specific row-injection hooks (e.g. _dynamic-benefits.js) mutate
+  // the zip's slide XML directly and may add extra token getters to
+  // effectiveMap — optional, so branches/projects without such a file are
+  // unaffected. Must run before slide XML is read below.
+  try {
+    const dynamicBenefits = await import('./_dynamic-benefits.js');
+    dynamicBenefits.apply(zip, data, effectiveMap);
+  } catch (e) {
+    if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+  }
+
   const replacements = {};
   for (const [key, getter] of Object.entries(effectiveMap)) {
     try {
