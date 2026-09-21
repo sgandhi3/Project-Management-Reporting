@@ -21,7 +21,10 @@
 //             blocked by every mail client/browser for security, not an
 //             Outlook-specific limitation.
 //
-// Usage: node scripts/create-outlook-draft.js <path-to-report-file>
+// Usage: node scripts/create-outlook-draft.js <path-to-report-file> [path-to-body-text-file]
+// If a body-text-file is given, its raw contents (plain text, newlines
+// preserved) are used as the email body verbatim. Otherwise falls back to a
+// generic one-line body.
 import '../env.js';
 import fs from 'fs';
 import path from 'path';
@@ -36,6 +39,12 @@ if (!filePath || !fs.existsSync(filePath)) {
   process.exit(1);
 }
 
+const bodyFilePath = process.argv[3];
+if (bodyFilePath && !fs.existsSync(bodyFilePath)) {
+  console.error(`Body text file not found: ${bodyFilePath}`);
+  process.exit(1);
+}
+
 const to = process.env.EMAIL_TO || process.env.OUTLOOK_USER;
 if (!to) {
   console.error('EMAIL_TO (or OUTLOOK_USER) must be set in .env to address the draft.');
@@ -46,7 +55,9 @@ const today = new Date().toLocaleDateString('en-US', {
   month: 'long', day: 'numeric', year: 'numeric',
 });
 const subject = `MMO SIT Report Ready — ${today}`;
-const body = `The MMO SIT Execution & Defect Report for ${today} is attached.`;
+const body = bodyFilePath
+  ? fs.readFileSync(bodyFilePath, 'utf8').replace(/\r\n/g, '\n')
+  : `The MMO SIT Execution & Defect Report for ${today} is attached.`;
 const absPath = path.resolve(filePath);
 
 async function openDraftMac() {

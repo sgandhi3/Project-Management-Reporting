@@ -9,6 +9,8 @@ report.pptx
 new temp.pptx
 ai-narrative-input.json
 .gather-cache.json
+email-body.txt
+.mmo-report-history.json
 *.xlsx
 ~$*
 .DS_Store
