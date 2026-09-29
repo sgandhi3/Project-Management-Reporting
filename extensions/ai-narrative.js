@@ -36,6 +36,13 @@ const NARRATIVE_KEYS = [
   'benefitsDefectStatus',
   'benefitsDefectInsights',
   'benefitsBurndownInsights',
+  // Enrollment/EDI Testing Defect Report slides
+  'enrollmentDefectStatus',
+  'enrollmentDefectInsights',
+  'enrollmentBurndownInsights',
+  'ediDefectStatus',
+  'ediDefectInsights',
+  'ediBurndownInsights',
 ];
 
 function loadOverride() {

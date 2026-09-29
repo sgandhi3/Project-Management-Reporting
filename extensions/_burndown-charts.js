@@ -1,6 +1,7 @@
-// MMO-specific: renders the two "defect burndown" line charts (PDM, Benefits)
-// that live on the PDM/Benefits Testing Defect Report slides, and swaps them
-// into the generated deck each run.
+// MMO-specific: renders the "defect burndown" line charts (PDM, Benefits,
+// and — as of the 09/2026 template refresh — Enrollment, EDI) that live on
+// each workstream's Testing Defect Report slide, and swaps them into the
+// generated deck each run.
 //
 // The chart plots cumulative defects logged vs. closed/resolved, by week,
 // since the earliest defect's createdDate — both dates ADO tracks natively
@@ -9,11 +10,11 @@
 //
 // Rendered as native SVG embedded via the modern OOXML svgBlip extension
 // (PowerPoint 2016+/365) rather than a rasterized PNG, so no canvas/image
-// native dependency is needed. The template's original PNG placeholder
-// (image9.png on the PDM defect slide, image10.png on the Benefits defect
-// slide) stays in place as the fallback image for anything that doesn't
-// understand svgBlip; only modern PowerPoint's fallback path would ever see
-// it, and only as a static (stale) picture.
+// native dependency is needed. Each slide's original PNG placeholder (see
+// CHART_TARGETS.imageFile — one distinct file per slide, so runs don't clobber
+// each other's placeholder) stays in place as the fallback image for anything
+// that doesn't understand svgBlip; only modern PowerPoint's fallback path
+// would ever see it, and only as a static (stale) picture.
 //
 // Isolated here like _dynamic-benefits.js — MMO-specific slide surgery, not
 // a generic reporting concern.
@@ -21,6 +22,10 @@
 const CHART_TARGETS = [
   { slide: 'ppt/slides/slide4.xml', rels: 'ppt/slides/_rels/slide4.xml.rels', imageFile: 'image9.png',  workstream: 'PDM',      svgName: 'burndownPDM.svg',      title: 'PDM Defect Burndown' },
   { slide: 'ppt/slides/slide6.xml', rels: 'ppt/slides/_rels/slide6.xml.rels', imageFile: 'image10.png', workstream: 'Benefits', svgName: 'burndownBenefits.svg', title: 'Benefits Defect Burndown' },
+  // 09/2026 — new Enrollment/EDI Testing Defect Report slides, cloned from
+  // the PDM slide layout, so they carry their own unique placeholder image.
+  { slide: 'ppt/slides/slide9.xml',  rels: 'ppt/slides/_rels/slide9.xml.rels',  imageFile: 'imageEnrollmentDefect.png', workstream: 'Enrollment', svgName: 'burndownEnrollment.svg', title: 'Enrollment Defect Burndown' },
+  { slide: 'ppt/slides/slide10.xml', rels: 'ppt/slides/_rels/slide10.xml.rels', imageFile: 'imageEDIDefect.png',        workstream: 'EDI',        svgName: 'burndownEDI.svg',        title: 'EDI Defect Burndown' },
 ];
 
 const toDate  = s => new Date(`${s}T00:00:00Z`);
