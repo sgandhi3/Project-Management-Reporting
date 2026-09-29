@@ -17,8 +17,12 @@ export const ADO_FIELDS = [
   '[System.AreaPath]',
   '[System.AssignedTo]',
   '[System.CreatedDate]',
+  '[System.Tags]',
   '[Microsoft.VSTS.Common.Severity]',
   '[Microsoft.VSTS.Common.Priority]',
+  '[Microsoft.VSTS.Common.ClosedDate]',
+  '[Microsoft.VSTS.Common.ResolvedDate]',
+  '[Microsoft.VSTS.TCM.ReproSteps]',
 ];
 
 export const ADO_FIELD_MAP = {
@@ -29,7 +33,21 @@ export const ADO_FIELD_MAP = {
   state:       wi => wi.fields['System.State']                      || '',
   areaPath:    wi => wi.fields['System.AreaPath']                   || '',
   createdDate: wi => (wi.fields['System.CreatedDate']               || '').slice(0, 10),
+  // ADO only auto-populates ClosedDate on transition to the Closed state —
+  // a bug sitting in Resolved has ClosedDate empty even though it's fixed,
+  // so fall back to ResolvedDate (which Resolved-state bugs do have) for
+  // the defect-burndown chart's "closed/resolved" line.
+  closedDate:  wi => (wi.fields['Microsoft.VSTS.Common.ClosedDate'] || wi.fields['Microsoft.VSTS.Common.ResolvedDate'] || '').slice(0, 10),
   owner:       wi => (wi.fields['System.AssignedTo']                || {}).displayName || 'Unassigned',
+  tags:        wi => wi.fields['System.Tags']                       || '',
+  // Repro Steps come back as HTML, and on a bug linked to a test case ADO
+  // keeps appending a timestamped history block to it on every run — some
+  // run to 100K+ characters. Strip tags for plain-text keyword matching
+  // (see extensions/_defect-classification.js) and cap the length: the
+  // plan/context info this is used for always appears in the first
+  // paragraph or two, and an uncapped field would blow up the narrative
+  // data dump an agent reads every week.
+  reproSteps:  wi => (wi.fields['Microsoft.VSTS.TCM.ReproSteps']    || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 1000),
 };
 
 // ─── Status / severity maps ────────────────────────────────────────────────────
@@ -206,9 +224,13 @@ export const QUERIES = uiConfig?.queries?.length
       scope:         'workstream',
       groupByFields: [],
 
+      // Includes both Closed and Resolved states — the new template's defect
+      // tables show a Closed/Resolved split (see variables.js), so both need
+      // to come through here rather than Resolved falling into neither
+      // query.
       ado: {
         workItemType:  'Bug',
-        excludeStates: ['Active', 'Resolved', 'New', 'Blocked'],
+        includeStates: ['Closed', 'Resolved'],
         orderBy:       '[Microsoft.VSTS.Common.Severity] ASC',
         fields:        ADO_FIELDS,
         fieldMap:      ADO_FIELD_MAP,

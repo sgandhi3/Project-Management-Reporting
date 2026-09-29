@@ -1,16 +1,20 @@
-// MMO-specific: dynamically inserts PPTX table rows on slide 4 (the Benefits
-// detail slide's per-plan breakdown table) for Benefits plans that have
-// started executing but aren't one of the 3 hardcoded "Priority" plans
-// (Signature HMO, Access PPO, Premium PPO). Plain {{TOKEN}} substitution
-// can't do this — it only fills existing cells, it can't add table rows —
-// so this runs BEFORE the normal substitution pass in extensions/ppt.js,
-// mutating the raw slide XML directly.
+// MMO-specific: dynamically inserts PPTX table rows on the Benefits
+// execution slide's per-plan breakdown table for Benefits plans that have
+// started executing but aren't one of the 5 plans with a permanent template
+// row (Signature HMO, Access PPO, Premium PPO, MMEGWP PPO CWRU MAPD,
+// Classic HMO NEOH — see FIXED_BENEFIT_ROW_KEYS in variables.js). Plain
+// {{TOKEN}} substitution can't do this — it only fills existing cells, it
+// can't add table rows — so this runs BEFORE the normal substitution pass
+// in extensions/ppt.js, mutating the raw slide XML directly.
 //
-// The executive summary (slide 2) does NOT get a dynamic row — that slide's
-// single Benefits row was retokenized once (see
-// scripts/fix-benefits-grand-total-token.js) to show the combined
-// Priority + active-2026 total directly via ACTIVEBEN* tokens, so it never
-// needs new rows added.
+// As of the 09/2026 template refresh this targets slide5 (previously
+// slide4, before PDM Execution/Defects and Benefits Execution/Defects were
+// split into their own slides) and clones the "Classic HMO NEOH" row — now
+// the last of the 5 fixed rows, immediately before Grand Total.
+//
+// The executive summary (slide 2) does NOT get a dynamic row — it shows the
+// combined Priority + active-2026 total directly via ACTIVEBEN* tokens, so
+// it never needs new rows added.
 //
 // This is intentionally isolated here rather than folded into ppt.js/
 // variables.js's generic engine — it's specific to this project's Priority
@@ -20,12 +24,15 @@
 //
 // KNOWN LIMITATION: PowerPoint doesn't auto-reflow a slide when a table
 // grows. The shift thresholds below were measured by hand against the
-// current temp2.pptx (see git history for the measurements). If the
+// current template (see git history for the measurements). If the
 // template is redesigned — shapes moved, resized, or added near this
 // table — these hardcoded values will need re-measuring. This has only
 // been verified at the XML/text level, not by rendering in PowerPoint —
-// open a generated report and visually check slide 4 after this runs,
-// especially with more than one or two extra active plans.
+// open a generated report and visually check the Benefits execution slide
+// after this runs, especially with more than one or two extra active plans.
+// A newly-inserted row also has no real Target Completion Date — it
+// inherits whatever literal date string is on the cloned Classic HMO NEOH
+// row, which will read wrong until someone edits it by hand.
 
 import { getExtraActiveBenefitPlans } from '../variables.js';
 
@@ -75,19 +82,19 @@ function reflow(xml, { thresholdY, deltaY, growPanelBottomsNear = [] }) {
   );
 }
 
-// ── Slide 4: per-plan breakdown table ──────────────────────────────────────
+// ── Benefits execution slide: per-plan breakdown table ─────────────────────
 
-function injectSlide4(xml, extraPlans, tokenMap) {
-  const anchorIdx = xml.indexOf('Premium PPO');
+function injectSlide5(xml, extraPlans, tokenMap) {
+  const anchorIdx = xml.indexOf('Classic HMO NEOH');
   const gfStart = xml.lastIndexOf('<p:graphicFrame>', anchorIdx);
   const gfEnd = xml.indexOf('</p:graphicFrame>', anchorIdx) + '</p:graphicFrame>'.length;
   const frame = xml.slice(gfStart, gfEnd);
 
   const rows = extractRows(frame);
-  const templateRow = rows.find(r => r.includes('Premium PPO'));
+  const templateRow = rows.find(r => r.includes('Classic HMO NEOH'));
   const grandTotalRow = rows.find(r => r.includes('Grand Total'));
   if (!templateRow || !grandTotalRow) {
-    console.warn('  ⚠  _dynamic-benefits: slide4 template/Grand Total row not found — skipping row injection');
+    console.warn('  ⚠  _dynamic-benefits: template/Grand Total row not found — skipping row injection');
     return xml;
   }
 
@@ -103,17 +110,17 @@ function injectSlide4(xml, extraPlans, tokenMap) {
     tokenMap[`${prefix}IPTC`] = () => plan.stats.inProgress;
     tokenMap[`${prefix}BTC`]  = () => plan.stats.blocked;
     tokenMap[`${prefix}NSTC`] = () => plan.stats.notStarted;
-    tokenMap[`${prefix}B`]    = () => 0;
+    tokenMap[`${prefix}DEF`]  = () => 0;
 
-    newRowsXml += cloneRowWithTokens(templateRow, 'Premium PPO', plan.label, {
-      '{{BENEPRPTTC}}':  `{{${prefix}TTC}}`,
-      '{{BENEPRPETC}}':  `{{${prefix}ETC}}`,
-      '{{BENEPRPPTC}}':  `{{${prefix}PTC}}`,
-      '{{BENEPRPFTC}}':  `{{${prefix}FTC}}`,
-      '{{BENEPRPIPTC}}': `{{${prefix}IPTC}}`,
-      '{{BENEPRPBTC}}':  `{{${prefix}BTC}}`,
-      '{{BENEPRPNSTC}}': `{{${prefix}NSTC}}`,
-      '{{BENEPRPB}}':    `{{${prefix}B}}`,
+    newRowsXml += cloneRowWithTokens(templateRow, 'Classic HMO NEOH', plan.label, {
+      '{{BENENEOHTTC}}':  `{{${prefix}TTC}}`,
+      '{{BENENEOHETC}}':  `{{${prefix}ETC}}`,
+      '{{BENENEOHPTC}}':  `{{${prefix}PTC}}`,
+      '{{BENENEOHFTC}}':  `{{${prefix}FTC}}`,
+      '{{BENENEOHIPTC}}': `{{${prefix}IPTC}}`,
+      '{{BENENEOHBTC}}':  `{{${prefix}BTC}}`,
+      '{{BENENEOHNSTC}}': `{{${prefix}NSTC}}`,
+      '{{BENENEOHDEFOPEN}}': `{{${prefix}DEF}}`,
     });
   });
 
@@ -123,22 +130,24 @@ function injectSlide4(xml, extraPlans, tokenMap) {
 
   let newXml = xml.slice(0, gfStart) + newFrame + xml.slice(gfEnd);
 
-  // Measured against current temp2.pptx: the footnote/legend text block
-  // starts at y=4953823, right after this table.
-  newXml = reflow(newXml, { thresholdY: 4900000, deltaY: addedHeight });
+  // Measured against the 09/2026 template: the table's own graphicFrame
+  // bottom sits at y=5632627, with the legend/status panels starting right
+  // after at y=5633823 — no separate enclosing background panel to grow
+  // here (unlike the pre-refresh template).
+  newXml = reflow(newXml, { thresholdY: 5600000, deltaY: addedHeight });
 
   return newXml;
 }
 
-// Mutates zip's slide4.xml in place and adds any new per-plan token getters
-// into effectiveMap. No-op if no plan outside the 3 hardcoded Priority ones
-// has started executing yet.
+// Mutates zip's slide5.xml in place and adds any new per-plan token getters
+// into effectiveMap. No-op if no plan outside the 5 fixed rows has started
+// executing yet.
 export function apply(zip, data, effectiveMap) {
   const extraPlans = getExtraActiveBenefitPlans(data);
   if (!extraPlans.length) return;
 
-  const slide4 = injectSlide4(zip.file('ppt/slides/slide4.xml').asText(), extraPlans, effectiveMap);
-  zip.file('ppt/slides/slide4.xml', slide4);
+  const slide5 = injectSlide5(zip.file('ppt/slides/slide5.xml').asText(), extraPlans, effectiveMap);
+  zip.file('ppt/slides/slide5.xml', slide5);
 
   console.log(`  Dynamic Benefits rows: added ${extraPlans.length} plan(s) — ${extraPlans.map(p => p.label).join(', ')}`);
 }

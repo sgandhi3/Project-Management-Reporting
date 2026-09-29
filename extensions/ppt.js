@@ -74,6 +74,13 @@ export async function generate(data) {
     if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
   }
 
+  try {
+    const burndownCharts = await import('./_burndown-charts.js');
+    burndownCharts.apply(zip, data, effectiveMap);
+  } catch (e) {
+    if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+  }
+
   const replacements = {};
   for (const [key, getter] of Object.entries(effectiveMap)) {
     try {

@@ -63,7 +63,7 @@
       "enabled": true,
       "scope": "workstream",
       "groupByFields": [],
-      "wiqlTemplate": "SELECT [System.Id], [System.Title], [System.State], [System.AreaPath], [System.AssignedTo], [System.CreatedDate], [Microsoft.VSTS.Common.Severity], [Microsoft.VSTS.Common.Priority] FROM WorkItems WHERE [System.WorkItemType] = 'Bug' AND [System.TeamProject] = '{{ADO_PROJECT}}' AND [System.State] NOT IN ('Active', 'Resolved', 'New', 'Blocked') AND [System.AreaPath] UNDER '{{areaPath}}' ORDER BY [Microsoft.VSTS.Common.Severity] ASC",
+      "wiqlTemplate": "SELECT [System.Id], [System.Title], [System.State], [System.AreaPath], [System.AssignedTo], [System.CreatedDate], [Microsoft.VSTS.Common.Severity], [Microsoft.VSTS.Common.Priority] FROM WorkItems WHERE [System.WorkItemType] = 'Bug' AND [System.TeamProject] = '{{ADO_PROJECT}}' AND [System.State] IN ('Closed', 'Resolved') AND [System.AreaPath] UNDER '{{areaPath}}' ORDER BY [Microsoft.VSTS.Common.Severity] ASC",
       "jiraTemplate": "project = \"{{projectKey}}\" AND issuetype = Bug AND statusCategory = Done ORDER BY priority ASC"
     },
     {

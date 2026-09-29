@@ -28,6 +28,14 @@ const NARRATIVE_KEYS = [
   'pdmDataQualityDetail1',
   'pdmDataQualityDetail2',
   'pdmDataMappingDetail',
+  // 09/2026 template additions
+  'defectTriage',
+  'pdmDefectStatus',
+  'pdmDefectInsights',
+  'pdmBurndownInsights',
+  'benefitsDefectStatus',
+  'benefitsDefectInsights',
+  'benefitsBurndownInsights',
 ];
 
 function loadOverride() {

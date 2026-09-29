@@ -11,6 +11,8 @@
 // Run `node gather-data.js --preview` to see all available d.subStats keys.
 // WorkstreamName must match the `name` field in the WORKSTREAMS array in config.js.
 
+import { pdmDefectBucket, benefitsDefectPlan } from './extensions/_defect-classification.js';
+
 const pct  = (n, d) => d ? Math.round((n / d) * 100) : 0;
 const sub  = (d, ws, path) => d.subStats?.[ws]?.[path] ?? {};
 const stat = (d, ws, path, field) => sub(d, ws, path)[field] ?? 0;
@@ -34,6 +36,17 @@ export const PRIORITY_BENEFIT_KEYS = new Set([
   'Priority / Premium PPO',
 ]);
 
+// As of the 09/2026 template refresh, Classic HMO NEOH and MMEGWP PPO CWRU
+// MAPD also have their own permanent template rows (slide 5) alongside the
+// 3 Priority plans — see BENENEOH*/BENEMMEGWP* tokens below. Excluded here
+// too so _dynamic-benefits.js doesn't also try to inject a duplicate row
+// for them; it now only fires for a plan beyond these 5.
+export const FIXED_BENEFIT_ROW_KEYS = new Set([
+  ...PRIORITY_BENEFIT_KEYS,
+  'HMO / Classic HMO NEOH',
+  'EGWP 1 / MMEGWP PPO CWRU MAPD',
+]);
+
 const activeBenEntries = d =>
   Object.entries(d.subStats?.Benefits ?? {})
     .filter(([key, s]) => key.split(' / ').length === 2 && s.executed > 0);
@@ -52,7 +65,7 @@ const toTitleCase = s =>
 // these are what extensions/_dynamic-benefits.js inserts new rows for.
 export const getExtraActiveBenefitPlans = d =>
   activeBenEntries(d)
-    .filter(([key]) => !PRIORITY_BENEFIT_KEYS.has(key))
+    .filter(([key]) => !FIXED_BENEFIT_ROW_KEYS.has(key))
     .map(([key, s]) => ({ key, label: toTitleCase(key.split(' / ').pop()), stats: s }));
 
 // Grand total across all workstreams, using filtered Benefits
@@ -110,6 +123,8 @@ export const VARIABLE_MAP = {
   PDMSITFTC:  d => stat(d, 'PDM', 'SIT', 'failed'),
   PDMSITFP:   d => pct(stat(d, 'PDM', 'SIT', 'failed'),    stat(d, 'PDM', 'SIT', 'executed')),
   PDMSITIPTC: d => stat(d, 'PDM', 'SIT', 'inProgress'),
+  PDMSITBTC:  d => stat(d, 'PDM', 'SIT', 'blocked'),
+  PDMSITNSTC: d => stat(d, 'PDM', 'SIT', 'notStarted'),
   PDMSITB:    d => 0,
 
   // ── PDM — Cursory Iteration breakdown ─────────────────────────────────────
@@ -303,5 +318,97 @@ export const VARIABLE_MAP = {
   AI_PDM_DQ_DEFECT_DETAIL_1: d => d._aiNarratives?.pdmDataQualityDetail1 ?? '',
   AI_PDM_DQ_DEFECT_DETAIL_2: d => d._aiNarratives?.pdmDataQualityDetail2 ?? '',
   AI_PDM_DM_DEFECT_DETAIL:  d => d._aiNarratives?.pdmDataMappingDetail ?? '',
+
+  // ── AI-refreshed narrative — 09/2026 template additions ───────────────────
+  AI_DEFECT_TRIAGE:                d => d._aiNarratives?.defectTriage ?? '',
+  AI_PDM_DEFECT_STATUS:            d => d._aiNarratives?.pdmDefectStatus ?? '',
+  AI_PDM_DEFECT_INSIGHTS:          d => d._aiNarratives?.pdmDefectInsights ?? '',
+  AI_PDM_BURNDOWN_INSIGHTS:        d => d._aiNarratives?.pdmBurndownInsights ?? '',
+  AI_BENEFITS_DEFECT_STATUS:       d => d._aiNarratives?.benefitsDefectStatus ?? '',
+  AI_BENEFITS_DEFECT_INSIGHTS:     d => d._aiNarratives?.benefitsDefectInsights ?? '',
+  AI_BENEFITS_BURNDOWN_INSIGHTS:   d => d._aiNarratives?.benefitsBurndownInsights ?? '',
+
+  // ── Benefits — Classic HMO NEOH / MMEGWP PPO CWRU MAPD (fixed rows) ───────
+  // Promoted from dynamic-row plans to permanent template rows in the
+  // 09/2026 template refresh — see FIXED_BENEFIT_ROW_KEYS above.
+  BENENEOHTTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'planned'),
+  BENENEOHETC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'executed'),
+  BENENEOHPTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'passed'),
+  BENENEOHFTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'failed'),
+  BENENEOHIPTC: d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'inProgress'),
+  BENENEOHBTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'blocked'),
+  BENENEOHNSTC: d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'notStarted'),
+
+  BENEMMEGWPTTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'planned'),
+  BENEMMEGWPETC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'executed'),
+  BENEMMEGWPPTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'passed'),
+  BENEMMEGWPFTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'failed'),
+  BENEMMEGWPIPTC: d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'inProgress'),
+  BENEMMEGWPBTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'blocked'),
+  BENEMMEGWPNSTC: d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'notStarted'),
+
+  // ── PDM / Benefits defect breakdown by bucket (09/2026 template) ─────────
+  // ADO's Area Path can't tell these apart (see _defect-classification.js
+  // for why) — classified from Tags (PDM) / Title+Repro Steps (Benefits)
+  // per report-owner direction. Coverage isn't 100%: a bug that doesn't
+  // classify into any bucket still counts in the reliable workstream-wide
+  // totals (PDMCB, ACTIVEBENB, etc.) but won't appear in any one bucket
+  // below, so per-bucket sums can run slightly under the workstream total.
+  ...(() => {
+    const pdmBugsAll    = d => [...(d.bugs?.PDM ?? []), ...(d.closedBugs?.PDM ?? [])];
+    const pdmBucketOpen   = (d, bucket) => (d.bugs?.PDM ?? []).filter(b => pdmDefectBucket(b) === bucket).length;
+    const pdmBucketClosed = (d, bucket, state) => (d.closedBugs?.PDM ?? []).filter(b => pdmDefectBucket(b) === bucket && b.state === state).length;
+    const pdmBucketTotal  = (d, bucket) => pdmBugsAll(d).filter(b => pdmDefectBucket(b) === bucket).length;
+
+    const pdmBucketTokens = (prefix, bucket) => ({
+      [`${prefix}DEFTOTAL`]:    d => pdmBucketTotal(d, bucket),
+      [`${prefix}DEFOPEN`]:     d => pdmBucketOpen(d, bucket),
+      [`${prefix}DEFCLOSED`]:   d => pdmBucketClosed(d, bucket, 'Closed'),
+      [`${prefix}DEFRESOLVED`]: d => pdmBucketClosed(d, bucket, 'Resolved'),
+    });
+
+    const benefitsBugsAll    = d => [...(d.bugs?.Benefits ?? []), ...(d.closedBugs?.Benefits ?? [])];
+    const benefitsPlanOpen   = (d, plan) => (d.bugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === plan).length;
+    const benefitsPlanClosed = (d, plan, state) => (d.closedBugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === plan && b.state === state).length;
+    const benefitsPlanTotal  = (d, plan) => benefitsBugsAll(d).filter(b => benefitsDefectPlan(b) === plan).length;
+
+    const benefitsPlanTokens = (prefix, plan) => ({
+      [`${prefix}DEFTOTAL`]:    d => benefitsPlanTotal(d, plan),
+      [`${prefix}DEFOPEN`]:     d => benefitsPlanOpen(d, plan),
+      [`${prefix}DEFCLOSED`]:   d => benefitsPlanClosed(d, plan, 'Closed'),
+      [`${prefix}DEFRESOLVED`]: d => benefitsPlanClosed(d, plan, 'Resolved'),
+    });
+
+    return {
+      ...pdmBucketTokens('PDMIT2',  'Iteration 2'),
+      ...pdmBucketTokens('PDMIT21', 'Iteration 2.1'),
+      ...pdmBucketTokens('PDMIT3',  'Iteration 3'),
+      ...pdmBucketTokens('PDMSIT',  'SIT'),
+
+      // Cursory-phase (any numbered iteration) open defects, for the
+      // executive-summary breakdown table's "PDM - Cursory" row.
+      PDMCURSORYDEFOPEN: d => pdmBucketOpen(d, 'Iteration 2') + pdmBucketOpen(d, 'Iteration 2.1') + pdmBucketOpen(d, 'Iteration 3'),
+
+      PDMDEFTOTAL:         d => pdmBugsAll(d).length,
+      PDMDEFCLOSEDTOTAL:   d => (d.closedBugs?.PDM ?? []).filter(b => b.state === 'Closed').length,
+      PDMDEFRESOLVEDTOTAL: d => (d.closedBugs?.PDM ?? []).filter(b => b.state === 'Resolved').length,
+
+      ...benefitsPlanTokens('BENESIHM',    'Signature HMO'),
+      ...benefitsPlanTokens('BENEACP',     'Access PPO'),
+      ...benefitsPlanTokens('BENEPRP',     'Premium PPO'),
+      ...benefitsPlanTokens('BENENEOH',    'Classic HMO NEOH'),
+      ...benefitsPlanTokens('BENEMMEGWP',  'MMEGWP PPO CWRU MAPD'),
+
+      // Combined open-defect counts for the exec-summary/slide-5 aggregate
+      // rows ("SIT – Priority Benefit" = the 3 priority plans; "SIT – 2026
+      // Benefits" = the other 2 active plans).
+      BENEPBDEF:  d => benefitsPlanOpen(d, 'Signature HMO') + benefitsPlanOpen(d, 'Access PPO') + benefitsPlanOpen(d, 'Premium PPO'),
+      BENE26DEF:  d => benefitsPlanOpen(d, 'Classic HMO NEOH') + benefitsPlanOpen(d, 'MMEGWP PPO CWRU MAPD'),
+
+      BENEDEFTOTAL:         d => benefitsBugsAll(d).length,
+      BENEDEFCLOSEDTOTAL:   d => (d.closedBugs?.Benefits ?? []).filter(b => b.state === 'Closed').length,
+      BENEDEFRESOLVEDTOTAL: d => (d.closedBugs?.Benefits ?? []).filter(b => b.state === 'Resolved').length,
+    };
+  })(),
 
 };
