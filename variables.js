@@ -289,7 +289,10 @@ export const VARIABLE_MAP = {
   ENROFP:   d => pct(d.stats.Enrollment.failed,     d.stats.Enrollment.executed),
   ENROIPTC: d => d.stats.Enrollment.inProgress,
   ENROBTC:  d => d.stats.Enrollment.blocked,
-  ENRONSTC: d => d.stats.Enrollment.notStarted,
+  // Enrollment's ADO "Paused" test cases are reported as Not Started here
+  // (report-owner direction — paused cases haven't been run, so they belong
+  // in the same bucket as everything else that hasn't started).
+  ENRONSTC: d => d.stats.Enrollment.notStarted + d.stats.Enrollment.paused,
   ENROB:    d => (d.bugs?.Enrollment ?? []).length,
 
   // ── EDI (key: 'SIT') ───────────────────────────────────────────────────────
@@ -327,6 +330,14 @@ export const VARIABLE_MAP = {
   AI_BENEFITS_DEFECT_STATUS:       d => d._aiNarratives?.benefitsDefectStatus ?? '',
   AI_BENEFITS_DEFECT_INSIGHTS:     d => d._aiNarratives?.benefitsDefectInsights ?? '',
   AI_BENEFITS_BURNDOWN_INSIGHTS:   d => d._aiNarratives?.benefitsBurndownInsights ?? '',
+
+  // ── AI-refreshed narrative — 09/2026 Enrollment/EDI Defect Report slides ──
+  AI_ENROLLMENT_DEFECT_STATUS:     d => d._aiNarratives?.enrollmentDefectStatus ?? '',
+  AI_ENROLLMENT_DEFECT_INSIGHTS:   d => d._aiNarratives?.enrollmentDefectInsights ?? '',
+  AI_ENROLLMENT_BURNDOWN_INSIGHTS: d => d._aiNarratives?.enrollmentBurndownInsights ?? '',
+  AI_EDI_DEFECT_STATUS:            d => d._aiNarratives?.ediDefectStatus ?? '',
+  AI_EDI_DEFECT_INSIGHTS:          d => d._aiNarratives?.ediDefectInsights ?? '',
+  AI_EDI_BURNDOWN_INSIGHTS:        d => d._aiNarratives?.ediBurndownInsights ?? '',
 
   // ── Benefits — Classic HMO NEOH / MMEGWP PPO CWRU MAPD (fixed rows) ───────
   // Promoted from dynamic-row plans to permanent template rows in the
@@ -379,6 +390,31 @@ export const VARIABLE_MAP = {
       [`${prefix}DEFRESOLVED`]: d => benefitsPlanClosed(d, plan, 'Resolved'),
     });
 
+    // ── "Testing Defect Summary by Severity" tables (09/2026 template
+    // addition, all 4 workstreams) ──────────────────────────────────────────
+    // Same open/closed/resolved/total shape as the bucket/plan tokens above,
+    // but split by ADO Severity instead — no classification heuristic
+    // needed, severity is a native ADO field.
+    const SEVERITY_LEVELS = [
+      ['CRIT', '1 - Critical'],
+      ['HIGH', '2 - High'],
+      ['MED',  '3 - Medium'],
+      ['LOW',  '4 - Low'],
+    ];
+    const severityTokens = (prefix, ws) => {
+      const open   = d => d.bugs?.[ws] ?? [];
+      const closed = d => d.closedBugs?.[ws] ?? [];
+      const all    = d => [...open(d), ...closed(d)];
+      const tokens = {};
+      for (const [key, sev] of SEVERITY_LEVELS) {
+        tokens[`${prefix}SEV${key}TOTAL`]    = d => all(d).filter(b => b.severity === sev).length;
+        tokens[`${prefix}SEV${key}OPEN`]     = d => open(d).filter(b => b.severity === sev).length;
+        tokens[`${prefix}SEV${key}CLOSED`]   = d => closed(d).filter(b => b.severity === sev && b.state === 'Closed').length;
+        tokens[`${prefix}SEV${key}RESOLVED`] = d => closed(d).filter(b => b.severity === sev && b.state === 'Resolved').length;
+      }
+      return tokens;
+    };
+
     return {
       ...pdmBucketTokens('PDMIT2',  'Iteration 2'),
       ...pdmBucketTokens('PDMIT21', 'Iteration 2.1'),
@@ -408,6 +444,23 @@ export const VARIABLE_MAP = {
       BENEDEFTOTAL:         d => benefitsBugsAll(d).length,
       BENEDEFCLOSEDTOTAL:   d => (d.closedBugs?.Benefits ?? []).filter(b => b.state === 'Closed').length,
       BENEDEFRESOLVEDTOTAL: d => (d.closedBugs?.Benefits ?? []).filter(b => b.state === 'Resolved').length,
+
+      // Enrollment/EDI have no bucket/plan breakdown — the whole workstream
+      // is a single "SIT" row on their (new, 09/2026) Testing Defect Report
+      // slide, so the same 3 tokens feed both the "SIT" row and the "TOTAL"
+      // row directly beneath it (intentionally identical values).
+      ENRODEFTOTAL:         d => (d.bugs?.Enrollment ?? []).length + (d.closedBugs?.Enrollment ?? []).length,
+      ENRODEFCLOSEDTOTAL:   d => (d.closedBugs?.Enrollment ?? []).filter(b => b.state === 'Closed').length,
+      ENRODEFRESOLVEDTOTAL: d => (d.closedBugs?.Enrollment ?? []).filter(b => b.state === 'Resolved').length,
+
+      EDIDEFTOTAL:         d => (d.bugs?.EDI ?? []).length + (d.closedBugs?.EDI ?? []).length,
+      EDIDEFCLOSEDTOTAL:   d => (d.closedBugs?.EDI ?? []).filter(b => b.state === 'Closed').length,
+      EDIDEFRESOLVEDTOTAL: d => (d.closedBugs?.EDI ?? []).filter(b => b.state === 'Resolved').length,
+
+      ...severityTokens('PDM',  'PDM'),
+      ...severityTokens('BENE', 'Benefits'),
+      ...severityTokens('ENRO', 'Enrollment'),
+      ...severityTokens('EDI',  'EDI'),
     };
   })(),
 
