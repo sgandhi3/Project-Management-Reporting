@@ -12,6 +12,8 @@
 // WorkstreamName must match the `name` field in the WORKSTREAMS array in config.js.
 
 import { pdmDefectBucket, benefitsDefectPlan } from './extensions/_defect-classification.js';
+import { agingBuckets } from './extensions/_defect-aging.js';
+import { SIT_SCHEDULE, INDUSTRY_BENCHMARK_TEST_CASES } from './config.js';
 
 const pct  = (n, d) => d ? Math.round((n / d) * 100) : 0;
 const sub  = (d, ws, path) => d.subStats?.[ws]?.[path] ?? {};
@@ -461,6 +463,73 @@ export const VARIABLE_MAP = {
       ...severityTokens('BENE', 'Benefits'),
       ...severityTokens('ENRO', 'Enrollment'),
       ...severityTokens('EDI',  'EDI'),
+    };
+  })(),
+
+  // ── Defect Aging (10/2026 template addition, all 4 workstreams) ──────────
+  // Open-defect counts bucketed by days-since-logged — see
+  // extensions/_defect-aging.js. Only d.bugs.<WS> (currently open) feeds
+  // this; closed/resolved defects aren't "aged".
+  ...(() => {
+    const agingTokens = (prefix, ws) => ({
+      [`${prefix}AGE010`]:  d => agingBuckets(d.bugs?.[ws] ?? []).d0_10,
+      [`${prefix}AGE1120`]: d => agingBuckets(d.bugs?.[ws] ?? []).d11_20,
+      [`${prefix}AGE2130`]: d => agingBuckets(d.bugs?.[ws] ?? []).d21_30,
+      [`${prefix}AGE31P`]:  d => agingBuckets(d.bugs?.[ws] ?? []).d31p,
+    });
+    return {
+      ...agingTokens('PDM',  'PDM'),
+      ...agingTokens('BENE', 'Benefits'),
+      ...agingTokens('ENRO', 'Enrollment'),
+      ...agingTokens('EDI',  'EDI'),
+    };
+  })(),
+
+  // ── Test Case Planning Summary slide (10/2026 template addition) ─────────
+  // One row per workstream: ADO test case count, an industry-benchmark
+  // reference figure (config.js), a pacing-derived "planned execution to
+  // date" target, the committed SIT end date, actual execution to date, and
+  // a blank Comments cell left for manual fill-in each week (see
+  // config.js SIT_SCHEDULE / INDUSTRY_BENCHMARK_TEST_CASES for the
+  // non-ADO-derived inputs this relies on).
+  ...(() => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const today = () => new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T00:00:00Z');
+
+    // "Expected executed by now" = (total cases / total SIT-window days) *
+    // elapsed days since the window's start, capped to the window.
+    const plannedToDate = (totalCases, schedule) => {
+      if (!schedule) return 0;
+      const start = new Date(`${schedule.start}T00:00:00Z`);
+      const end   = new Date(`${schedule.end}T00:00:00Z`);
+      const totalDays = (end - start) / DAY_MS;
+      if (totalDays <= 0) return totalCases;
+      const elapsedDays = Math.min(Math.max((today() - start) / DAY_MS, 0), totalDays);
+      return Math.round((totalCases / totalDays) * elapsedDays);
+    };
+
+    const fmtDate = iso => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: '2-digit', day: '2-digit', year: 'numeric' });
+
+    // ADO totals per workstream — Benefits uses the same active-plan filter
+    // (activeBenSum) as the rest of the report rather than raw stats.Benefits,
+    // so this stays consistent with every other Benefits figure in the deck.
+    const adoTotal    = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'planned')  : d.stats[ws].planned;
+    const adoExecuted = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'executed') : d.stats[ws].executed;
+
+    const tcsTokens = (prefix, ws) => ({
+      [`${prefix}TCSADO`]:      d => adoTotal(d, ws),
+      [`${prefix}TCSBENCH`]:    () => INDUSTRY_BENCHMARK_TEST_CASES[ws] ?? '',
+      [`${prefix}TCSPLANNED`]:  d => plannedToDate(adoTotal(d, ws), SIT_SCHEDULE[ws]),
+      [`${prefix}TCSSITEND`]:   () => SIT_SCHEDULE[ws] ? fmtDate(SIT_SCHEDULE[ws].end) : '',
+      [`${prefix}TCSACTUAL`]:   d => adoExecuted(d, ws),
+      [`${prefix}TCSCOMMENTS`]: () => '',
+    });
+
+    return {
+      ...tcsTokens('PDM',  'PDM'),
+      ...tcsTokens('BENE', 'Benefits'),
+      ...tcsTokens('ENRO', 'Enrollment'),
+      ...tcsTokens('EDI',  'EDI'),
     };
   })(),
 

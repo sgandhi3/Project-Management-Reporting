@@ -1,6 +1,7 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
 import fs from 'fs';
 import { WORKSTREAMS, QUERIES, SETTINGS } from './config.js';
+import { agingBuckets } from './extensions/_defect-aging.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
 
@@ -277,12 +278,23 @@ async function main() {
   // agent knows if any workstream's numbers came back zeroed due to a fetch
   // failure rather than genuinely being zero.
   if (args.includes('--narrative-data')) {
+    // Open-defect age buckets (0-10/11-20/21-30/31+ days) per workstream —
+    // same classification feeding the "Defect Aging" table on each
+    // workstream's Testing Defect Report slide (see extensions/_defect-aging.js).
+    // Exposed here so the burndown-insights sentence can cite the same
+    // figures shown on the table instead of re-deriving them from raw bugs.
+    const aging = {};
+    for (const ws of Object.keys(data.bugs || {})) {
+      aging[ws] = agingBuckets(data.bugs[ws] || []);
+    }
+
     process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
       stats: data.stats,
       subStats: data.subStats,
       consolidatedData: data.consolidatedData,
       bugs: data.bugs,
       closedBugs: data.closedBugs,
+      agingBuckets: aging,
       _fetchErrors: data._fetchErrors,
     }) + '\n');
     return;

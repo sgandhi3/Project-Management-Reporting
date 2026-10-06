@@ -88,6 +88,40 @@ export const ZEPHYR_STATUS_MAP = {
   'PAUSED':       'paused',
 };
 
+// ─── SIT schedule (per-workstream Start/End dates) ─────────────────────────────
+//
+// Source: report-owner-provided workstream phase schedule (Oct 2026). Drives
+// the "Test Case Planning Summary" slide's SIT End Date column and the
+// Planned Execution pacing calculation in variables.js — the elapsed-time
+// fraction of each workstream's Start→End window is multiplied against its
+// total ADO test case count to get an expected-to-date execution target.
+//
+// Update this if a workstream's committed SIT window changes.
+export const SIT_SCHEDULE = {
+  PDM:        { start: '2026-09-07', end: '2026-10-15' }, // "Ready to Service Providers (PDM)"
+  Benefits:   { start: '2026-06-22', end: '2026-10-15' }, // "Ready to Sell (Benefits)"
+  Enrollment: { start: '2026-07-15', end: '2026-10-15' }, // "Ready to Enroll (Enrollment)"
+  EDI:        { start: '2027-02-01', end: '2027-02-15' }, // "EDI (270/271)"
+};
+
+// ─── Industry-benchmark test case counts ───────────────────────────────────────
+//
+// "What a typical SIT suite of this kind runs" — used only as a reference
+// column on the Test Case Planning Summary slide, next to each workstream's
+// actual ADO test case count. There's no single published external standard
+// for health-plan QA domains like these, so these are informed planning
+// estimates (not sourced from a specific study), anchored to the
+// report-owner's own Enrollment figure (100) and scaled by relative scope:
+// Benefits/PDM carry more plan- and data-source combinations than a single
+// enrollment workflow, EDI is the narrowest (one transaction set family).
+// Adjust these directly if your QA lead has better domain-specific figures.
+export const INDUSTRY_BENCHMARK_TEST_CASES = {
+  PDM:        150,
+  Benefits:   150,
+  Enrollment: 100,
+  EDI:        80,
+};
+
 // ─── Workstreams ───────────────────────────────────────────────────────────────
 //
 // One entry per workstream. The name is used as the key everywhere — in the data
