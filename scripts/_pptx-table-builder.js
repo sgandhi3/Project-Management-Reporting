@@ -11,7 +11,7 @@ export const DARK_TEXT = '313131';
 
 export const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-function cell({ text = '', bold = false, fill = null, color = null, gridSpan = null, hMerge = false, align = 'ctr' }) {
+export function cell({ text = '', bold = false, fill = null, color = null, gridSpan = null, hMerge = false, align = 'ctr' }) {
   if (hMerge) {
     return `<a:tc hMerge="1"><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr/></a:p></a:txBody><a:tcPr/></a:tc>`;
   }
@@ -35,6 +35,13 @@ export function headerRow(cells, height = 225000) {
 
 export function dataRow(cells, { height = 225000, boldFirst = true } = {}) {
   return `<a:tr h="${height}">${cells.map((text, i) => cell({ text, bold: boldFirst && i === 0 })).join('')}</a:tr>`;
+}
+
+// For rows that need per-cell control (e.g. one cell with a custom fill
+// color) beyond what dataRow's plain-text-array shorthand allows — pass an
+// array of cell() option objects directly.
+export function customRow(cellConfigs, height = 225000) {
+  return `<a:tr h="${height}">${cellConfigs.map(cell).join('')}</a:tr>`;
 }
 
 export function buildTable({ id, name, x, y, cx, cy, colWidths, rowsXml }) {

@@ -81,6 +81,13 @@ export async function generate(data) {
     if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
   }
 
+  try {
+    const tcsStatus = await import('./_tcs-status.js');
+    tcsStatus.apply(zip, data, effectiveMap);
+  } catch (e) {
+    if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+  }
+
   const replacements = {};
   for (const [key, getter] of Object.entries(effectiveMap)) {
     try {

@@ -13,7 +13,8 @@
 
 import { pdmDefectBucket, benefitsDefectPlan } from './extensions/_defect-classification.js';
 import { agingBuckets } from './extensions/_defect-aging.js';
-import { SIT_SCHEDULE, INDUSTRY_BENCHMARK_TEST_CASES } from './config.js';
+import { SIT_SCHEDULE } from './config.js';
+import { computeTcsPlanning } from './extensions/_tcs-planning.js';
 
 const pct  = (n, d) => d ? Math.round((n / d) * 100) : 0;
 const sub  = (d, ws, path) => d.subStats?.[ws]?.[path] ?? {};
@@ -476,28 +477,15 @@ export const VARIABLE_MAP = {
   })(),
 
   // ── Test Case Planning Summary slide (10/2026 template addition) ─────────
-  // One row per workstream: ADO test case count, an industry-benchmark
-  // reference figure (config.js), a pacing-derived "planned execution to
-  // date" target, the committed SIT end date, actual execution to date, and
-  // a blank Comments cell left for manual fill-in each week (see
-  // config.js SIT_SCHEDULE / INDUSTRY_BENCHMARK_TEST_CASES for the
-  // non-ADO-derived inputs this relies on).
+  // One row per workstream: ADO test case count, a pacing-derived "planned
+  // execution to date" target (+ % of total), the committed SIT end date,
+  // actual execution to date (+ % of total), the delta between actual and
+  // planned, a Status cell (colored by extensions/_tcs-status.js — TCSSTATUS
+  // always resolves to '' here, it's purely a cell-locator token for that
+  // extension), and a blank Comments cell left for manual fill-in each week.
+  // Planned/actual/delta math lives in extensions/_tcs-planning.js (shared
+  // with _tcs-status.js so the color and the numbers never disagree).
   ...(() => {
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const today = () => new Date(new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }) + 'T00:00:00Z');
-
-    // "Expected executed by now" = (total cases / total SIT-window days) *
-    // elapsed days since the window's start, capped to the window.
-    const plannedToDate = (totalCases, schedule) => {
-      if (!schedule) return 0;
-      const start = new Date(`${schedule.start}T00:00:00Z`);
-      const end   = new Date(`${schedule.end}T00:00:00Z`);
-      const totalDays = (end - start) / DAY_MS;
-      if (totalDays <= 0) return totalCases;
-      const elapsedDays = Math.min(Math.max((today() - start) / DAY_MS, 0), totalDays);
-      return Math.round((totalCases / totalDays) * elapsedDays);
-    };
-
     const fmtDate = iso => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { timeZone: 'UTC', month: '2-digit', day: '2-digit', year: 'numeric' });
 
     // ADO totals per workstream — Benefits uses the same active-plan filter
@@ -505,14 +493,18 @@ export const VARIABLE_MAP = {
     // so this stays consistent with every other Benefits figure in the deck.
     const adoTotal    = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'planned')  : d.stats[ws].planned;
     const adoExecuted = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'executed') : d.stats[ws].executed;
+    const planning    = (d, ws) => computeTcsPlanning(adoTotal(d, ws), adoExecuted(d, ws), ws);
 
     const tcsTokens = (prefix, ws) => ({
-      [`${prefix}TCSADO`]:      d => adoTotal(d, ws),
-      [`${prefix}TCSBENCH`]:    () => INDUSTRY_BENCHMARK_TEST_CASES[ws] ?? '',
-      [`${prefix}TCSPLANNED`]:  d => plannedToDate(adoTotal(d, ws), SIT_SCHEDULE[ws]),
-      [`${prefix}TCSSITEND`]:   () => SIT_SCHEDULE[ws] ? fmtDate(SIT_SCHEDULE[ws].end) : '',
-      [`${prefix}TCSACTUAL`]:   d => adoExecuted(d, ws),
-      [`${prefix}TCSCOMMENTS`]: () => '',
+      [`${prefix}TCSADO`]:         d => adoTotal(d, ws),
+      [`${prefix}TCSPLANNED`]:     d => planning(d, ws).planned,
+      [`${prefix}TCSPLANNEDPCT`]:  d => planning(d, ws).plannedPct,
+      [`${prefix}TCSSITEND`]:      () => SIT_SCHEDULE[ws] ? fmtDate(SIT_SCHEDULE[ws].end) : '',
+      [`${prefix}TCSACTUAL`]:      d => adoExecuted(d, ws),
+      [`${prefix}TCSACTUALPCT`]:   d => planning(d, ws).actualPct,
+      [`${prefix}TCSDELTA`]:       d => { const v = planning(d, ws).delta; return v > 0 ? `+${v}` : `${v}`; },
+      [`${prefix}TCSSTATUS`]:      () => '',
+      [`${prefix}TCSCOMMENTS`]:    () => '',
     });
 
     return {

@@ -104,24 +104,6 @@ export const SIT_SCHEDULE = {
   EDI:        { start: '2027-02-01', end: '2027-02-15' }, // "EDI (270/271)"
 };
 
-// ─── Industry-benchmark test case counts ───────────────────────────────────────
-//
-// "What a typical SIT suite of this kind runs" — used only as a reference
-// column on the Test Case Planning Summary slide, next to each workstream's
-// actual ADO test case count. There's no single published external standard
-// for health-plan QA domains like these, so these are informed planning
-// estimates (not sourced from a specific study), anchored to the
-// report-owner's own Enrollment figure (100) and scaled by relative scope:
-// Benefits/PDM carry more plan- and data-source combinations than a single
-// enrollment workflow, EDI is the narrowest (one transaction set family).
-// Adjust these directly if your QA lead has better domain-specific figures.
-export const INDUSTRY_BENCHMARK_TEST_CASES = {
-  PDM:        150,
-  Benefits:   150,
-  Enrollment: 100,
-  EDI:        80,
-};
-
 // ─── Workstreams ───────────────────────────────────────────────────────────────
 //
 // One entry per workstream. The name is used as the key everywhere — in the data
