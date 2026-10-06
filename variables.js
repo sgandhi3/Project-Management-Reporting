@@ -22,6 +22,12 @@ const stat = (d, ws, path, field) => sub(d, ws, path)[field] ?? 0;
 // Sums a field across multiple sub-suite paths
 const sumStat = (d, ws, paths, field) => paths.reduce((acc, p) => acc + stat(d, ws, p, field), 0);
 
+// "Not Started" absorbs In Progress and Paused — the deck no longer shows
+// those as separate buckets (report-owner direction, Oct 2026), so every
+// *NSTC token folds them in here rather than reporting notStarted alone.
+const nsPlus    = (d, ws, path)  => stat(d, ws, path, 'notStarted') + stat(d, ws, path, 'inProgress') + stat(d, ws, path, 'paused');
+const sumNsPlus = (d, ws, paths) => sumStat(d, ws, paths, 'notStarted') + sumStat(d, ws, paths, 'inProgress') + sumStat(d, ws, paths, 'paused');
+
 // Benefits active-plan filter:
 // Only count individual benefit plans (depth-2 keys like 'Priority / Signature HMO',
 // 'HMO / Classic HMO NEOH') that have ≥1 execution.
@@ -57,6 +63,8 @@ const activeBenSuites = d => activeBenEntries(d).map(([, s]) => s);
 
 const activeBenSum = (d, field) =>
   activeBenSuites(d).reduce((acc, s) => acc + (s[field] ?? 0), 0);
+
+const activeBenNsPlus = d => activeBenSum(d, 'notStarted') + activeBenSum(d, 'inProgress') + activeBenSum(d, 'paused');
 
 // ADO sub-suite names are inconsistently cased (e.g. "MMEGWP PPO CWRU MAPD").
 // Title-case each word for display in the report regardless of source casing.
@@ -101,8 +109,9 @@ export const VARIABLE_MAP = {
   PP:   d => pct(activeGrandTotal(d, 'passed'),     activeGrandTotal(d, 'executed')),
   FTC:  d => activeGrandTotal(d, 'failed'),
   FP:   d => pct(activeGrandTotal(d, 'failed'),     activeGrandTotal(d, 'executed')),
-  IPTC: d => activeGrandTotal(d, 'inProgress'),
-  NSTC: d => activeGrandTotal(d, 'notStarted'),
+  // "Not Started" absorbs In Progress and Paused — the deck no longer shows
+  // those as separate buckets (report-owner direction, Oct 2026).
+  NSTC: d => activeGrandTotal(d, 'notStarted') + activeGrandTotal(d, 'inProgress') + activeGrandTotal(d, 'paused'),
   TB:   d => d.bugsBySeverity.total,
 
   // ── PDM — Cursory sub-suite (key: 'Cursory') ──────────────────────────────
@@ -113,7 +122,6 @@ export const VARIABLE_MAP = {
   PDMCPP:    d => pct(stat(d, 'PDM', 'Cursory', 'passed'),    stat(d, 'PDM', 'Cursory', 'executed')),
   PDMCFTC:   d => stat(d, 'PDM', 'Cursory', 'failed'),
   PDMCFP:    d => pct(stat(d, 'PDM', 'Cursory', 'failed'),    stat(d, 'PDM', 'Cursory', 'executed')),
-  PDMCIPTC:  d => stat(d, 'PDM', 'Cursory', 'inProgress'),
   PDMCB:     d => (d.bugs?.PDM ?? []).length,
 
   // ── PDM — SIT sub-suite (key: 'SIT') ──────────────────────────────────────
@@ -124,9 +132,8 @@ export const VARIABLE_MAP = {
   PDMSITPP:   d => pct(stat(d, 'PDM', 'SIT', 'passed'),    stat(d, 'PDM', 'SIT', 'executed')),
   PDMSITFTC:  d => stat(d, 'PDM', 'SIT', 'failed'),
   PDMSITFP:   d => pct(stat(d, 'PDM', 'SIT', 'failed'),    stat(d, 'PDM', 'SIT', 'executed')),
-  PDMSITIPTC: d => stat(d, 'PDM', 'SIT', 'inProgress'),
   PDMSITBTC:  d => stat(d, 'PDM', 'SIT', 'blocked'),
-  PDMSITNSTC: d => stat(d, 'PDM', 'SIT', 'notStarted'),
+  PDMSITNSTC: d => nsPlus(d, 'PDM', 'SIT'),
   PDMSITB:    d => 0,
 
   // ── PDM — Cursory Iteration breakdown ─────────────────────────────────────
@@ -138,9 +145,8 @@ export const VARIABLE_MAP = {
   PDMIT2PP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed')),
   PDMIT2FTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'failed'),
   PDMIT2FP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'executed')),
-  PDMIT2IPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'inProgress'),
   PDMIT2BTC:   d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'blocked'),
-  PDMIT2NSTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0', 'notStarted'),
+  PDMIT2NSTC:  d => nsPlus(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.0'),
   PDMIT2B:     d => 0,
 
   PDMIT21TTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'planned'),
@@ -150,9 +156,8 @@ export const VARIABLE_MAP = {
   PDMIT21PP:   d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed')),
   PDMIT21FTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'failed'),
   PDMIT21FP:   d => pct(stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'executed')),
-  PDMIT21IPTC: d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'inProgress'),
   PDMIT21BTC:  d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'blocked'),
-  PDMIT21NSTC: d => stat(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1', 'notStarted'),
+  PDMIT21NSTC: d => nsPlus(d, 'PDM', 'Cursory / Iteration 2 / Iteration 2.1'),
   PDMIT21B:    d => 0,
 
   PDMIT3TTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'planned'),
@@ -162,9 +167,8 @@ export const VARIABLE_MAP = {
   PDMIT3PP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 3', 'passed'),   stat(d, 'PDM', 'Cursory / Iteration 3', 'executed')),
   PDMIT3FTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'failed'),
   PDMIT3FP:    d => pct(stat(d, 'PDM', 'Cursory / Iteration 3', 'failed'),   stat(d, 'PDM', 'Cursory / Iteration 3', 'executed')),
-  PDMIT3IPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3', 'inProgress'),
   PDMIT3BTC:   d => stat(d, 'PDM', 'Cursory / Iteration 3', 'blocked'),
-  PDMIT3NSTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3', 'notStarted'),
+  PDMIT3NSTC:  d => nsPlus(d, 'PDM', 'Cursory / Iteration 3'),
   PDMIT3B:     d => 0,
 
   // ── PDM — Iteration 3 Data Source breakdown ────────────────────────────────
@@ -173,36 +177,32 @@ export const VARIABLE_MAP = {
   PDMIT3CPETC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'executed'),
   PDMIT3CPPTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'passed'),
   PDMIT3CPFTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'failed'),
-  PDMIT3CPIPTC: d => sumStat(d, 'PDM', CPIMS3_PATHS, 'inProgress'),
   PDMIT3CPBTC:  d => sumStat(d, 'PDM', CPIMS3_PATHS, 'blocked'),
-  PDMIT3CPNSTC: d => sumStat(d, 'PDM', CPIMS3_PATHS, 'notStarted'),
+  PDMIT3CPNSTC: d => sumNsPlus(d, 'PDM', CPIMS3_PATHS),
   PDMIT3CPB:    d => 0,
 
   PDMIT3ANTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'planned'),
   PDMIT3ANETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'executed'),
   PDMIT3ANPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'passed'),
   PDMIT3ANFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'failed'),
-  PDMIT3ANIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'inProgress'),
   PDMIT3ANBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'blocked'),
-  PDMIT3ANNSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Ancillary',        'notStarted'),
+  PDMIT3ANNSTC: d => nsPlus(d, 'PDM', 'Cursory / Iteration 3 / Ancillary'),
   PDMIT3ANB:    d => 0,
 
   PDMIT3ROTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'planned'),
   PDMIT3ROETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'executed'),
   PDMIT3ROPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'passed'),
   PDMIT3ROFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'failed'),
-  PDMIT3ROIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'inProgress'),
   PDMIT3ROBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'blocked'),
-  PDMIT3RONSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Rosters',          'notStarted'),
+  PDMIT3RONSTC: d => nsPlus(d, 'PDM', 'Cursory / Iteration 3 / Rosters'),
   PDMIT3ROB:    d => 0,
 
   PDMIT3PNTTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'planned'),
   PDMIT3PNETC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'executed'),
   PDMIT3PNPTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'passed'),
   PDMIT3PNFTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'failed'),
-  PDMIT3PNIPTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'inProgress'),
   PDMIT3PNBTC:  d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'blocked'),
-  PDMIT3PNNSTC: d => stat(d, 'PDM', 'Cursory / Iteration 3 / Provider Network', 'notStarted'),
+  PDMIT3PNNSTC: d => nsPlus(d, 'PDM', 'Cursory / Iteration 3 / Provider Network'),
   PDMIT3PNB:    d => 0,
 
   // ── PDM — Defect counts by severity ───────────────────────────────────────
@@ -219,9 +219,8 @@ export const VARIABLE_MAP = {
   BENEPBPP:    d => pct(stat(d, 'Benefits', 'Priority', 'passed'),   stat(d, 'Benefits', 'Priority', 'executed')),
   BENEPBFTC:   d => stat(d, 'Benefits', 'Priority', 'failed'),
   BENEPBFP:    d => pct(stat(d, 'Benefits', 'Priority', 'failed'),   stat(d, 'Benefits', 'Priority', 'executed')),
-  BENEPBIPTC:  d => stat(d, 'Benefits', 'Priority', 'inProgress'),
   BENEPBBTC:   d => stat(d, 'Benefits', 'Priority', 'blocked'),
-  BENEPBNSTC:  d => stat(d, 'Benefits', 'Priority', 'notStarted'),
+  BENEPBNSTC:  d => nsPlus(d, 'Benefits', 'Priority'),
   BENEPBB:     d => (d.bugs?.Benefits ?? []).length,
 
   // ── Benefits — 2026 Benefits (active non-Priority folders only) ──────────
@@ -233,9 +232,8 @@ export const VARIABLE_MAP = {
   BENE26PP:    d => pct(activeBenSum(d, 'passed')  - stat(d, 'Benefits', 'Priority', 'passed'),   activeBenSum(d, 'executed') - stat(d, 'Benefits', 'Priority', 'executed')),
   BENE26FTC:   d => activeBenSum(d, 'failed')     - stat(d, 'Benefits', 'Priority', 'failed'),
   BENE26FP:    d => pct(activeBenSum(d, 'failed')  - stat(d, 'Benefits', 'Priority', 'failed'),   activeBenSum(d, 'executed') - stat(d, 'Benefits', 'Priority', 'executed')),
-  BENE26IPTC:  d => activeBenSum(d, 'inProgress') - stat(d, 'Benefits', 'Priority', 'inProgress'),
   BENE26BTC:   d => activeBenSum(d, 'blocked')    - stat(d, 'Benefits', 'Priority', 'blocked'),
-  BENE26NSTC:  d => activeBenSum(d, 'notStarted') - stat(d, 'Benefits', 'Priority', 'notStarted'),
+  BENE26NSTC:  d => activeBenNsPlus(d) - nsPlus(d, 'Benefits', 'Priority'),
   BENE26B:     d => 0,
 
   // ── Benefits — active total (Priority + any active non-Priority plans) ───
@@ -248,9 +246,8 @@ export const VARIABLE_MAP = {
   ACTIVEBENPP:   d => pct(activeBenSum(d, 'passed'),   activeBenSum(d, 'executed')),
   ACTIVEBENFTC:  d => activeBenSum(d, 'failed'),
   ACTIVEBENFP:   d => pct(activeBenSum(d, 'failed'),   activeBenSum(d, 'executed')),
-  ACTIVEBENIPTC: d => activeBenSum(d, 'inProgress'),
   ACTIVEBENBTC:  d => activeBenSum(d, 'blocked'),
-  ACTIVEBENNSTC: d => activeBenSum(d, 'notStarted'),
+  ACTIVEBENNSTC: d => activeBenNsPlus(d),
   ACTIVEBENB:    d => (d.bugs?.Benefits ?? []).length,
 
   // ── Benefits — Benefit type breakdown (Priority sub-suites) ───────────────
@@ -258,27 +255,24 @@ export const VARIABLE_MAP = {
   BENESIHMETC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'executed'),
   BENESIHMPTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'passed'),
   BENESIHMFTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'failed'),
-  BENESIHMIPTC: d => stat(d, 'Benefits', 'Priority / Signature HMO',               'inProgress'),
   BENESIHMBTC:  d => stat(d, 'Benefits', 'Priority / Signature HMO',               'blocked'),
-  BENESIHMNSTC: d => stat(d, 'Benefits', 'Priority / Signature HMO',               'notStarted'),
+  BENESIHMNSTC: d => nsPlus(d, 'Benefits', 'Priority / Signature HMO'),
   BENESIHMB:    d => 0,
 
   BENEACPTTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'planned'),
   BENEACPETC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'executed'),
   BENEACPPTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'passed'),
   BENEACPFTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'failed'),
-  BENEACPIPTC:  d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'inProgress'),
   BENEACPBTC:   d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'blocked'),
-  BENEACPNSTC:  d => stat(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)', 'notStarted'),
+  BENEACPNSTC:  d => nsPlus(d, 'Benefits', 'Priority / Access PPO (Premium PPO INN)'),
   BENEACPB:     d => 0,
 
   BENEPRPTTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'planned'),
   BENEPRPETC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'executed'),
   BENEPRPPTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'passed'),
   BENEPRPFTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'failed'),
-  BENEPRPIPTC:  d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'inProgress'),
   BENEPRPBTC:   d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'blocked'),
-  BENEPRPNSTC:  d => stat(d, 'Benefits', 'Priority / Premium PPO',                 'notStarted'),
+  BENEPRPNSTC:  d => nsPlus(d, 'Benefits', 'Priority / Premium PPO'),
   BENEPRPB:     d => 0,
 
   // ── Enrollment (key: 'SIT') ────────────────────────────────────────────────
@@ -289,12 +283,11 @@ export const VARIABLE_MAP = {
   ENROPP:   d => pct(d.stats.Enrollment.passed,     d.stats.Enrollment.executed),
   ENROFTC:  d => d.stats.Enrollment.failed,
   ENROFP:   d => pct(d.stats.Enrollment.failed,     d.stats.Enrollment.executed),
-  ENROIPTC: d => d.stats.Enrollment.inProgress,
   ENROBTC:  d => d.stats.Enrollment.blocked,
-  // Enrollment's ADO "Paused" test cases are reported as Not Started here
-  // (report-owner direction — paused cases haven't been run, so they belong
-  // in the same bucket as everything else that hasn't started).
-  ENRONSTC: d => d.stats.Enrollment.notStarted + d.stats.Enrollment.paused,
+  // In Progress and Paused test cases are reported as Not Started here
+  // (report-owner direction — neither has produced a result yet, so both
+  // belong in the same bucket as everything else that hasn't started).
+  ENRONSTC: d => d.stats.Enrollment.notStarted + d.stats.Enrollment.inProgress + d.stats.Enrollment.paused,
   ENROB:    d => (d.bugs?.Enrollment ?? []).length,
 
   // ── EDI (key: 'SIT') ───────────────────────────────────────────────────────
@@ -305,9 +298,8 @@ export const VARIABLE_MAP = {
   EDIPP:   d => pct(d.stats.EDI.passed,    d.stats.EDI.executed),
   EDIFTC:  d => d.stats.EDI.failed,
   EDIFP:   d => pct(d.stats.EDI.failed,    d.stats.EDI.executed),
-  EDIIPTC: d => d.stats.EDI.inProgress,
   EDIBTC:  d => d.stats.EDI.blocked,
-  EDINSTC: d => d.stats.EDI.notStarted,
+  EDINSTC: d => d.stats.EDI.notStarted + d.stats.EDI.inProgress + d.stats.EDI.paused,
   EDIB:    d => (d.bugs?.EDI ?? []).length,
 
   // ── AI-refreshed narrative sentences (populated by extensions/ai-narrative.js) ──
@@ -348,17 +340,15 @@ export const VARIABLE_MAP = {
   BENENEOHETC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'executed'),
   BENENEOHPTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'passed'),
   BENENEOHFTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'failed'),
-  BENENEOHIPTC: d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'inProgress'),
   BENENEOHBTC:  d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'blocked'),
-  BENENEOHNSTC: d => stat(d, 'Benefits', 'HMO / Classic HMO NEOH', 'notStarted'),
+  BENENEOHNSTC: d => nsPlus(d, 'Benefits', 'HMO / Classic HMO NEOH'),
 
   BENEMMEGWPTTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'planned'),
   BENEMMEGWPETC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'executed'),
   BENEMMEGWPPTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'passed'),
   BENEMMEGWPFTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'failed'),
-  BENEMMEGWPIPTC: d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'inProgress'),
   BENEMMEGWPBTC:  d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'blocked'),
-  BENEMMEGWPNSTC: d => stat(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD', 'notStarted'),
+  BENEMMEGWPNSTC: d => nsPlus(d, 'Benefits', 'EGWP 1 / MMEGWP PPO CWRU MAPD'),
 
   // ── PDM / Benefits defect breakdown by bucket (09/2026 template) ─────────
   // ADO's Area Path can't tell these apart (see _defect-classification.js
