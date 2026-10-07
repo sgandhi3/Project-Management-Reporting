@@ -1,6 +1,6 @@
 import './env.js';  // must be first — loads .env before config.js reads process.env
 import fs from 'fs';
-import { WORKSTREAMS, QUERIES, SETTINGS } from './config.js';
+import { WORKSTREAMS, QUERIES, SETTINGS, MANUAL_STAT_FLOORS } from './config.js';
 import { agingBuckets } from './extensions/_defect-aging.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
@@ -112,6 +112,18 @@ async function collectAllData(provider) {
     }
 
     console.log('');
+  }
+
+  // ── Manual stat floors (see MANUAL_STAT_FLOORS in config.js) ────────────────
+  for (const [wsName, floors] of Object.entries(MANUAL_STAT_FLOORS)) {
+    const s = data.stats[wsName];
+    if (!s) continue;
+    const missing = Math.max(0, (floors.failed ?? 0) - s.failed);
+    for (let i = 0; i < missing; i++) {
+      const from = s.paused > 0 ? 'paused' : s.notStarted > 0 ? 'notStarted' : null;
+      if (from) s[from]--;
+      s.failed++; s.executed++;
+    }
   }
 
   // ── Consolidated test stats ───────────────────────────────────────────────────

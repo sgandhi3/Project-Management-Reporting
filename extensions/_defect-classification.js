@@ -8,7 +8,7 @@
 // folded into variables.js since it's MMO-specific triage logic, not a
 // generic reporting concern.
 //
-// KNOWN LIMITATION: neither classifier is 100% — a handful of PDM bugs carry
+// KNOWN LIMITATION (Benefits only; PDM now falls back to SIT): the classifier isn't 100% — a handful of PDM bugs carry
 // only a generic "Cursory" tag with no iteration number (or no recognized
 // tag at all), and a small number of Benefits bugs don't mention any plan
 // name in their title or repro steps. Those bugs are excluded from the
@@ -21,7 +21,10 @@ export function pdmDefectBucket(bug) {
   if (tags.includes('Iteration 2.1')) return 'Iteration 2.1';
   if (tags.includes('Iteration 2'))   return 'Iteration 2';
   if (tags.includes('Iteration 3'))   return 'Iteration 3';
-  return null;
+  // Catch-all: a bug with no recognized iteration tag (untagged new intake,
+  // or only a generic "Cursory" / unrelated tag) lands in SIT, the current
+  // phase, so the bucket rows always sum to the workstream total.
+  return 'SIT';
 }
 
 // Priority order matters — checked most-specific first so a repro step that
@@ -45,5 +48,8 @@ export function benefitsDefectPlan(bug) {
   for (const [label, pattern] of BENEFITS_PLAN_PATTERNS) {
     if (pattern.test(combined)) return label;
   }
+  // Last resort: a bare "PPO ... In Net" title (no plan name) is the
+  // in-network PPO plan, i.e. Access PPO (Premium PPO INN).
+  if (/\bppo\b/i.test(title) && /in[\s-]*net/i.test(title)) return 'Access PPO';
   return null;
 }

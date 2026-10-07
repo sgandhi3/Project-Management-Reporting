@@ -98,10 +98,10 @@ export const ZEPHYR_STATUS_MAP = {
 //
 // Update this if a workstream's committed SIT window changes.
 export const SIT_SCHEDULE = {
-  PDM:        { start: '2026-09-07', end: '2026-10-15' }, // "Ready to Service Providers (PDM)"
-  Benefits:   { start: '2026-06-22', end: '2026-10-15' }, // "Ready to Sell (Benefits)"
+  PDM:        { start: '2026-09-07', end: '2026-12-18' }, // "Ready to Service Providers (PDM)"
+  Benefits:   { start: '2026-06-22', end: '2026-11-27' }, // "Ready to Sell (Benefits)"
   Enrollment: { start: '2026-07-15', end: '2026-10-15' }, // "Ready to Enroll (Enrollment)"
-  EDI:        { start: '2027-02-01', end: '2027-02-15' }, // "EDI (270/271)"
+  EDI:        { start: '2026-09-07', end: '2026-10-15' }, // EDI SIT — end date aligned to the other workstreams (start assumed = PDM's)
 };
 
 // ─── Workstreams ───────────────────────────────────────────────────────────────
@@ -255,3 +255,13 @@ export const QUERIES = uiConfig?.queries?.length
       jira: ws => `project = "${ws.projectKey}" AND issuetype = Bug AND statusCategory = Done ORDER BY priority ASC`,
     },
   ];
+
+// ─── Manual stat floors ────────────────────────────────────────────────────────
+//
+// Report-owner direction (Oct 2026): ADO has no recorded result for one
+// Enrollment case, but it should be reported as executed + failed. Applied
+// in gather-data.js as a floor, so it's a no-op once ADO itself shows >= 1
+// failed (no double-counting). The case is taken out of Paused / Not Started.
+export const MANUAL_STAT_FLOORS = {
+  Enrollment: { failed: 1 },
+};

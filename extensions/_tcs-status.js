@@ -30,10 +30,12 @@ function activeBenSum(data, field) {
 }
 
 function adoTotal(data, ws) {
-  return ws === 'Benefits' ? activeBenSum(data, 'planned') : data.stats?.[ws]?.planned ?? 0;
+  if (ws === 'PDM') return data.subStats?.PDM?.SIT?.planned ?? 0; // SIT only, no Cursory
+  return data.stats?.[ws]?.planned ?? 0;
 }
 function adoExecuted(data, ws) {
-  return ws === 'Benefits' ? activeBenSum(data, 'executed') : data.stats?.[ws]?.executed ?? 0;
+  if (ws === 'PDM') return data.subStats?.PDM?.SIT?.executed ?? 0;
+  return data.stats?.[ws]?.executed ?? 0;
 }
 
 // a:tc never nests within a:tc — safe to match top-level occurrences.

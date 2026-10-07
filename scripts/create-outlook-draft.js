@@ -60,13 +60,22 @@ const body = bodyFilePath
   : `The MMO SIT Execution & Defect Report for ${today} is attached.`;
 const absPath = path.resolve(filePath);
 
+// Mac Outlook treats `content` as HTML, so raw newlines collapse into one
+// run-on paragraph. A body file ending in .html is used as-is; plain text
+// is converted (blank line = new paragraph, single newline = <br>).
+const bodyIsHtml = !!bodyFilePath && /\.html?$/i.test(bodyFilePath);
+const htmlEsc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const htmlBody = bodyIsHtml
+  ? body
+  : body.split(/\n{2,}/).map(par => `<p>${htmlEsc(par).replace(/\n/g, '<br>')}</p>`).join('');
+
 async function openDraftMac() {
   // AppleScript string literals: escape backslashes and double quotes.
   const esc = s => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 
   const script = `
 tell application "Microsoft Outlook"
-  set newMessage to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(body)}"}
+  set newMessage to make new outgoing message with properties {subject:"${esc(subject)}", content:"${esc(htmlBody)}"}
   make new recipient at end of to recipients of newMessage with properties {email address:{address:"${esc(to)}"}}
   make new attachment at newMessage with properties {file:POSIX file "${esc(absPath)}"}
   open newMessage

@@ -34,7 +34,7 @@
 // inherits whatever literal date string is on the cloned Classic HMO NEOH
 // row, which will read wrong until someone edits it by hand.
 
-import { getExtraActiveBenefitPlans } from '../variables.js';
+import { getExtraActiveBenefitPlans, getNotStartedBenefitsRow } from '../variables.js';
 
 function extractRows(frameXml) {
   return [...frameXml.matchAll(/<a:tr h="\d+">[\s\S]*?<\/a:tr>/g)].map(m => m[0]);
@@ -84,7 +84,7 @@ function reflow(xml, { thresholdY, deltaY, growPanelBottomsNear = [] }) {
 
 // ── Benefits execution slide: per-plan breakdown table ─────────────────────
 
-function injectSlide5(xml, extraPlans, tokenMap) {
+function injectSlide5(xml, extraPlans, tokenMap, notStarted) {
   const anchorIdx = xml.indexOf('Classic HMO NEOH');
   const gfStart = xml.lastIndexOf('<p:graphicFrame>', anchorIdx);
   const gfEnd = xml.indexOf('</p:graphicFrame>', anchorIdx) + '</p:graphicFrame>'.length;
@@ -98,7 +98,7 @@ function injectSlide5(xml, extraPlans, tokenMap) {
     return xml;
   }
 
-  const addedHeight = rowHeight(templateRow) * extraPlans.length;
+  const addedHeight = rowHeight(templateRow) * (extraPlans.length + (notStarted ? 1 : 0));
 
   let newRowsXml = '';
   extraPlans.forEach((plan, i) => {
@@ -124,19 +124,69 @@ function injectSlide5(xml, extraPlans, tokenMap) {
     });
   });
 
+  // Remainder row so the table foots to the full Benefits total.
+  if (notStarted) {
+    tokenMap.DYNBENENSTTC  = () => notStarted.planned;
+    tokenMap.DYNBENENSNSTC = () => notStarted.notStarted;
+    tokenMap.DYNBENEZERO   = () => 0;
+    let row = cloneRowWithTokens(templateRow, 'Classic HMO NEOH', `Not Started (${notStarted.plansLeft} plans)`, {
+      '{{BENENEOHTTC}}':  '{{DYNBENENSTTC}}',
+      '{{BENENEOHETC}}':  '{{DYNBENEZERO}}',
+      '{{BENENEOHPTC}}':  '{{DYNBENEZERO}}',
+      '{{BENENEOHFTC}}':  '{{DYNBENEZERO}}',
+      '{{BENENEOHIPTC}}': '{{DYNBENEZERO}}',
+      '{{BENENEOHBTC}}':  '{{DYNBENEZERO}}',
+      '{{BENENEOHNSTC}}': '{{DYNBENENSNSTC}}',
+      '{{BENENEOHDEFOPEN}}': '{{DYNBENEZERO}}',
+    });
+    newRowsXml += row.replace('>11/30/2026<', '>TBD<');
+  }
+
   const insertAt = frame.indexOf(grandTotalRow);
   let newFrame = frame.slice(0, insertAt) + newRowsXml + frame.slice(insertAt);
   newFrame = growExtent(newFrame, addedHeight);
 
   let newXml = xml.slice(0, gfStart) + newFrame + xml.slice(gfEnd);
 
-  // Measured against the 09/2026 template: the table's own graphicFrame
-  // bottom sits at y=5632627, with the legend/status panels starting right
-  // after at y=5633823 — no separate enclosing background panel to grow
-  // here (unlike the pre-refresh template).
-  newXml = reflow(newXml, { thresholdY: 5600000, deltaY: addedHeight });
+  // Adding rows pushes the footnote boxes off the bottom of the slide, so
+  // instead of shifting by a hand-measured offset, re-fit: shrink the data
+  // rows as needed, then stack the footnotes directly under the table.
+  newXml = fitBenefitsSlide(newXml);
 
   return newXml;
+}
+
+const SLIDE_H = 6858000;
+const FOOT_GAP = 40000;
+
+function setBoxY(xml, name, y, cy) {
+  return xml.replace(new RegExp(`(<p:sp>(?:(?!</p:sp>).)*?name="${name}".*?<a:off x="\\d+" y=")\\d+("/><a:ext cx="\\d+" cy=")\\d+`, 's'),
+    (_m, a, b) => `${a}${y}${b}${cy}`);
+}
+
+function fitBenefitsSlide(xml) {
+  const gfStart = xml.lastIndexOf('<p:graphicFrame>', xml.indexOf('Benefits SIT Review Summary'));
+  const gfEnd = xml.indexOf('</p:graphicFrame>', gfStart) + '</p:graphicFrame>'.length;
+  let frame = xml.slice(gfStart, gfEnd);
+  const top = parseInt(frame.match(/<p:xfrm><a:off x="\d+" y="(\d+)"/)[1]);
+  const rows = extractRows(frame);
+  const heights = rows.map(rowHeight);
+  const fixed = heights[0] + heights[1];               // title + header rows
+  const nData = rows.length - 2;
+  const footH = 280000 + 492443 + 184666 + FOOT_GAP * 3;
+  const H = Math.max(230000, Math.min(340000, Math.floor((SLIDE_H - 60000 - footH - top - fixed) / nData)));
+  rows.forEach((r, i) => { if (i >= 2) frame = frame.replace(r, r.replace(/<a:tr h="\d+">/, `<a:tr h="${H}">`)); });
+  const tableH = fixed + H * nData;
+  frame = frame.replace(/(<p:xfrm><a:off x="\d+" y="\d+"\/><a:ext cx="\d+" cy=")\d+/, `$1${tableH}`);
+  let out = xml.slice(0, gfStart) + frame + xml.slice(gfEnd);
+  // Totals now include every Benefits case, so the old "pending plans are not
+  // reflected" note is stale.
+  out = out.replace(/Note: Additional 2026 Benefit plans[^<]*/, 'Note: Totals include all Benefits test cases; plans that have not started executing are grouped in the Not Started row.');
+  let y = top + tableH + FOOT_GAP;
+  out = setBoxY(out, 'TextBox 17', y, 280000); y += 280000 + FOOT_GAP;
+  out = setBoxY(out, 'TextBox 15', y, 492443); y += 492443 + FOOT_GAP;
+  out = setBoxY(out, 'TextBox 9',  y, 184666);
+  return out;
 }
 
 // Mutates zip's slide5.xml in place and adds any new per-plan token getters
@@ -144,10 +194,9 @@ function injectSlide5(xml, extraPlans, tokenMap) {
 // executing yet.
 export function apply(zip, data, effectiveMap) {
   const extraPlans = getExtraActiveBenefitPlans(data);
-  if (!extraPlans.length) return;
-
-  const slide5 = injectSlide5(zip.file('ppt/slides/slide5.xml').asText(), extraPlans, effectiveMap);
+  const notStarted = getNotStartedBenefitsRow(data);
+  const slide5 = injectSlide5(zip.file('ppt/slides/slide5.xml').asText(), extraPlans, effectiveMap, notStarted.planned > 0 ? notStarted : null);
   zip.file('ppt/slides/slide5.xml', slide5);
 
-  console.log(`  Dynamic Benefits rows: added ${extraPlans.length} plan(s) — ${extraPlans.map(p => p.label).join(', ')}`);
+  console.log(`  Dynamic Benefits rows: added ${extraPlans.length} plan(s) — ${extraPlans.map(p => p.label).join(', ')}${notStarted.planned > 0 ? ` + Not Started row (${notStarted.planned})` : ''}`);
 }

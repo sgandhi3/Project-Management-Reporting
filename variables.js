@@ -16,7 +16,17 @@ import { agingBuckets } from './extensions/_defect-aging.js';
 import { SIT_SCHEDULE } from './config.js';
 import { computeTcsPlanning } from './extensions/_tcs-planning.js';
 
-const pct  = (n, d) => d ? Math.round((n / d) * 100) : 0;
+// Whole-number percent, except where rounding would misstate a non-complete
+// (or non-zero) value as exactly 100% / 0% — those show one decimal (99.6).
+const pct  = (n, d) => {
+  if (!d) return 0;
+  const r = Math.round((n / d) * 100);
+  if (n > 0 && n < d && (r >= 100 || r <= 0)) {
+    const one = Math.round((n / d) * 1000) / 10;
+    return one >= 100 ? 99.9 : (one <= 0 ? 0.1 : one);
+  }
+  return r;
+};
 const sub  = (d, ws, path) => d.subStats?.[ws]?.[path] ?? {};
 const stat = (d, ws, path, field) => sub(d, ws, path)[field] ?? 0;
 
@@ -62,10 +72,24 @@ const activeBenEntries = d =>
 
 const activeBenSuites = d => activeBenEntries(d).map(([, s]) => s);
 
-const activeBenSum = (d, field) =>
-  activeBenSuites(d).reduce((acc, s) => acc + (s[field] ?? 0), 0);
+// Benefits totals now cover ALL Benefits test cases (started or not), per
+// report-owner direction. Only the per-plan rows on the Benefits execution
+// slide stay started-only (activeBenEntries) — _dynamic-benefits.js adds a
+// "Not Started" row so that table still foots to the full total.
+const activeBenSum = (d, field) => d.stats?.Benefits?.[field] ?? 0;
 
 const activeBenNsPlus = d => activeBenSum(d, 'notStarted') + activeBenSum(d, 'inProgress') + activeBenSum(d, 'paused');
+
+// Totals for the started-only plan rows, and the remainder (not-started plans).
+export const getNotStartedBenefitsRow = d => {
+  const f = k => activeBenSuites(d).reduce((a, s) => a + (s[k] ?? 0), 0);
+  const planned = activeBenSum(d, 'planned') - f('planned');
+  return {
+    planned,
+    notStarted: activeBenNsPlus(d) - (f('notStarted') + f('inProgress') + f('paused')),
+    plansLeft: Object.keys(d.subStats?.Benefits ?? {}).filter(k => k.split(' / ').length === 2 && !activeBenEntries(d).some(([a]) => a === k)).length,
+  };
+};
 
 // ADO sub-suite names are inconsistently cased (e.g. "MMEGWP PPO CWRU MAPD").
 // Title-case each word for display in the report regardless of source casing.
@@ -491,8 +515,10 @@ export const VARIABLE_MAP = {
     // ADO totals per workstream — Benefits uses the same active-plan filter
     // (activeBenSum) as the rest of the report rather than raw stats.Benefits,
     // so this stays consistent with every other Benefits figure in the deck.
-    const adoTotal    = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'planned')  : d.stats[ws].planned;
-    const adoExecuted = (d, ws) => ws === 'Benefits' ? activeBenSum(d, 'executed') : d.stats[ws].executed;
+    // PDM uses the SIT suite only (Cursory is wound down and excluded).
+    // Benefits counts ALL plans (started or not), per report-owner direction.
+    const adoTotal    = (d, ws) => ws === 'PDM' ? (d.subStats?.PDM?.SIT?.planned ?? 0)  : d.stats[ws].planned;
+    const adoExecuted = (d, ws) => ws === 'PDM' ? (d.subStats?.PDM?.SIT?.executed ?? 0) : d.stats[ws].executed;
     const planning    = (d, ws) => computeTcsPlanning(adoTotal(d, ws), adoExecuted(d, ws), ws);
 
     const tcsTokens = (prefix, ws) => ({
