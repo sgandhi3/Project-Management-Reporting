@@ -47,6 +47,14 @@ const NARRATIVE_KEYS = [
   'ediDefectStatus',
   'ediDefectInsights',
   'ediBurndownInsights',
+  // Source (Release 1.1 UAT, reported as SIT)
+  'sourceUpdate',
+  'sourceStatus',
+  'sourceDefectStatus',
+  'sourceDefectInsights',
+  'sourceBurndownInsights',
+  // Defects Dashboard slide (one bullet per line)
+  'defectsDashboardInsights',
 ];
 
 function loadOverride() {

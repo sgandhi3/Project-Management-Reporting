@@ -1,0 +1,17 @@
+{
+  "31417": {
+    "owner": "Certify",
+    "targetDate": "10/16",
+    "comments": "Delegated and hospitalist rosters being ingested (ETA 10/14); sample to be provided for testing, then full load targeted for 10/16."
+  },
+  "31222": {
+    "owner": "HE",
+    "targetDate": "TBD",
+    "comments": "HE reviewed: request omitted the required attachment type code tag, so the fix is in the sender payload. Awaiting final API documentation from HE."
+  },
+  "31546": {
+    "owner": "HE",
+    "targetDate": "TBD",
+    "comments": "HE supplied a corrected request; COB policies now add on a successful response. Pending final API documentation and MMO retest."
+  }
+}

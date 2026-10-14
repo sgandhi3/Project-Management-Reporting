@@ -36,5 +36,5 @@ export function computeTcsPlanning(ado, actual, ws) {
   const plannedPct = ado ? Math.round((planned / ado) * 100) : 0;
   const actualPct  = ado ? Math.round((actual  / ado) * 100) : 0;
   const delta = actual - planned;
-  return { planned, plannedPct, actualPct, delta, color: tcsStatusColor(planned, actual) };
+  return { planned, plannedPct, actualPct, delta, color: SIT_SCHEDULE[ws]?.statusColor ?? tcsStatusColor(planned, actual) };
 }

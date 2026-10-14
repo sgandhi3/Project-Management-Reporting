@@ -102,6 +102,7 @@ export const SIT_SCHEDULE = {
   Benefits:   { start: '2026-06-22', end: '2026-11-27' }, // "Ready to Sell (Benefits)"
   Enrollment: { start: '2026-07-15', end: '2026-10-15' }, // "Ready to Enroll (Enrollment)"
   EDI:        { start: '2026-09-07', end: '2026-10-15' }, // EDI SIT — end date aligned to the other workstreams (start assumed = PDM's)
+  Source:     { start: '2026-09-15', end: '2026-11-15', statusColor: '2E7D32' }, // Source SIT (ADO: Release 1.1 > Provider - Source > UAT, reported as SIT). statusColor: report owner declared Source On Track (green), so it overrides the pacing-derived color on the Planning Summary
 };
 
 // ─── Workstreams ───────────────────────────────────────────────────────────────
@@ -152,6 +153,16 @@ export const WORKSTREAMS = uiConfig?.workstreams?.length ? uiConfig.workstreams 
     // Jira / Zephyr
     projectKey:   process.env.JIRA_PROJECT_EDI,
     testCycleKey: process.env.ZEPHYR_CYCLE_EDI,
+  },
+  {
+    name: 'Source',
+    // ADO — Release 1.1 > Provider - Source > UAT suite, reported as SIT
+    planId:       process.env.PLAN_ID,
+    sitSuiteId:   process.env.SIT_SUITE_SOURCE || '30873',
+    areaPath:     process.env.SourceAreaPath || 'HRP\\Testing\\Provider\\Source',
+    // Jira / Zephyr
+    projectKey:   process.env.JIRA_PROJECT_SOURCE,
+    testCycleKey: process.env.ZEPHYR_CYCLE_SOURCE,
   },
 ];
 

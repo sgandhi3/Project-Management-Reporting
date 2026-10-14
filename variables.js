@@ -15,6 +15,7 @@ import { pdmDefectBucket, benefitsDefectPlan } from './extensions/_defect-classi
 import { agingBuckets } from './extensions/_defect-aging.js';
 import { SIT_SCHEDULE } from './config.js';
 import { computeTcsPlanning } from './extensions/_tcs-planning.js';
+import { dashboardMetrics } from './extensions/_defects-dashboard.js';
 
 // Whole-number percent, except where rounding would misstate a non-complete
 // (or non-zero) value as exactly 100% / 0% — those show one decimal (99.6).
@@ -327,6 +328,18 @@ export const VARIABLE_MAP = {
   EDINSTC: d => d.stats.EDI.notStarted + d.stats.EDI.inProgress + d.stats.EDI.paused,
   EDIB:    d => (d.bugs?.EDI ?? []).length,
 
+  // ── Source (ADO UAT suite, reported as SIT) ───────────────────────────────────────────────────────
+  SRCTTC:  d => d.stats.Source.planned,
+  SRCETC:  d => d.stats.Source.executed,
+  SRCEP:   d => pct(d.stats.Source.executed,  d.stats.Source.planned),
+  SRCPTC:  d => d.stats.Source.passed,
+  SRCPP:   d => pct(d.stats.Source.passed,    d.stats.Source.executed),
+  SRCFTC:  d => d.stats.Source.failed,
+  SRCFP:   d => pct(d.stats.Source.failed,    d.stats.Source.executed),
+  SRCBTC:  d => d.stats.Source.blocked,
+  SRCNSTC: d => d.stats.Source.notStarted + d.stats.Source.inProgress + d.stats.Source.paused,
+  SRCB:    d => (d.bugs?.Source ?? []).length,
+
   // ── AI-refreshed narrative sentences (populated by extensions/ai-narrative.js) ──
   // Blank unless ai-narrative-input.json exists (written by a live agent run) — see that file.
   AI_OVERALL_STATUS:        d => d._aiNarratives?.overallStatus ?? '',
@@ -337,6 +350,8 @@ export const VARIABLE_MAP = {
   AI_BENEFITS_STATUS:       d => d._aiNarratives?.benefitsStatus ?? '',
   AI_ENROLLMENT_STATUS:     d => d._aiNarratives?.enrollmentStatus ?? '',
   AI_EDI_STATUS:            d => d._aiNarratives?.ediStatus ?? '',
+  AI_SOURCE_STATUS:         d => d._aiNarratives?.sourceStatus ?? '',
+  AI_SOURCE_UPDATE:         d => d._aiNarratives?.sourceUpdate ?? '',
   AI_PDM_DQ_DEFECT_DETAIL_1: d => d._aiNarratives?.pdmDataQualityDetail1 ?? '',
   AI_PDM_DQ_DEFECT_DETAIL_2: d => d._aiNarratives?.pdmDataQualityDetail2 ?? '',
   AI_PDM_DM_DEFECT_DETAIL:  d => d._aiNarratives?.pdmDataMappingDetail ?? '',
@@ -364,6 +379,9 @@ export const VARIABLE_MAP = {
   AI_EDI_DEFECT_STATUS:            d => d._aiNarratives?.ediDefectStatus ?? '',
   AI_EDI_DEFECT_INSIGHTS:          d => d._aiNarratives?.ediDefectInsights ?? '',
   AI_EDI_BURNDOWN_INSIGHTS:        d => d._aiNarratives?.ediBurndownInsights ?? '',
+  AI_SOURCE_DEFECT_STATUS:         d => d._aiNarratives?.sourceDefectStatus ?? '',
+  AI_SOURCE_DEFECT_INSIGHTS:       d => d._aiNarratives?.sourceDefectInsights ?? '',
+  AI_SOURCE_BURNDOWN_INSIGHTS:     d => d._aiNarratives?.sourceBurndownInsights ?? '',
 
   // ── Benefits — Classic HMO NEOH / MMEGWP PPO CWRU MAPD (fixed rows) ───────
   // Promoted from dynamic-row plans to permanent template rows in the
@@ -481,10 +499,15 @@ export const VARIABLE_MAP = {
       EDIDEFCLOSEDTOTAL:   d => (d.closedBugs?.EDI ?? []).filter(b => b.state === 'Closed').length,
       EDIDEFRESOLVEDTOTAL: d => (d.closedBugs?.EDI ?? []).filter(b => b.state === 'Resolved').length,
 
+      SRCDEFTOTAL:         d => (d.bugs?.Source ?? []).length + (d.closedBugs?.Source ?? []).length,
+      SRCDEFCLOSEDTOTAL:   d => (d.closedBugs?.Source ?? []).filter(b => b.state === 'Closed').length,
+      SRCDEFRESOLVEDTOTAL: d => (d.closedBugs?.Source ?? []).filter(b => b.state === 'Resolved').length,
+
       ...severityTokens('PDM',  'PDM'),
       ...severityTokens('BENE', 'Benefits'),
       ...severityTokens('ENRO', 'Enrollment'),
       ...severityTokens('EDI',  'EDI'),
+      ...severityTokens('SRC',  'Source'),
     };
   })(),
 
@@ -504,8 +527,22 @@ export const VARIABLE_MAP = {
       ...agingTokens('BENE', 'Benefits'),
       ...agingTokens('ENRO', 'Enrollment'),
       ...agingTokens('EDI',  'EDI'),
+      ...agingTokens('SRC',  'Source'),
     };
   })(),
+
+  // ── Defects Dashboard slide (all-workstream tiles; table/charts are built by
+  // extensions/_defects-dashboard.js) ─────────────────────────────────────────
+  DASHTOTAL:      d => dashboardMetrics(d).total,
+  DASHCLOSED:     d => dashboardMetrics(d).closed,
+  DASHCLOSEDPCT:  d => dashboardMetrics(d).closedPct,
+  DASHOPEN:       d => dashboardMetrics(d).open,
+  DASHOPENPCT:    d => dashboardMetrics(d).openPct,
+  DASHOLD:        d => dashboardMetrics(d).old,
+  DASHOLDPCT:     d => dashboardMetrics(d).oldPct,
+  DASHCRIT:       d => dashboardMetrics(d).crit,
+  DASHUNASSIGNED: d => dashboardMetrics(d).unassigned,
+  AI_DASH_INSIGHTS: d => '',  // bullets are expanded by _defects-dashboard.js before token replacement
 
   // ── Test Case Planning Summary slide (10/2026 template addition) ─────────
   // One row per workstream: ADO test case count, a pacing-derived "planned
@@ -543,7 +580,7 @@ export const VARIABLE_MAP = {
     // Overall expected execution % across the four SIT workstreams (sum of
     // pacing-derived planned-to-date / sum of ADO SIT cases) — the "expected
     // execution rate" quoted in the exec summary and under the planning table.
-    const WSS = ['PDM', 'Benefits', 'Enrollment', 'EDI'];
+    const WSS = ['PDM', 'Benefits', 'Enrollment', 'EDI', 'Source'];
     const expectedPct = d => {
       const tot = WSS.reduce((a, ws) => a + adoTotal(d, ws), 0);
       const pl  = WSS.reduce((a, ws) => a + planning(d, ws).planned, 0);
@@ -564,6 +601,7 @@ export const VARIABLE_MAP = {
       ...tcsTokens('BENE', 'Benefits'),
       ...tcsTokens('ENRO', 'Enrollment'),
       ...tcsTokens('EDI',  'EDI'),
+      ...tcsTokens('SRC',  'Source'),
     };
   })(),
 

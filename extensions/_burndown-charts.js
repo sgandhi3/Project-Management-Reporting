@@ -26,6 +26,8 @@ const CHART_TARGETS = [
   // the PDM slide layout, so they carry their own unique placeholder image.
   { slide: 'ppt/slides/slide9.xml',  rels: 'ppt/slides/_rels/slide9.xml.rels',  imageFile: 'imageEnrollmentDefect.png', workstream: 'Enrollment', svgName: 'burndownEnrollment.svg', title: 'Enrollment Defect Burndown' },
   { slide: 'ppt/slides/slide10.xml', rels: 'ppt/slides/_rels/slide10.xml.rels', imageFile: 'imageEDIDefect.png',        workstream: 'EDI',        svgName: 'burndownEDI.svg',        title: 'EDI Defect Burndown' },
+  // Source — cloned from the EDI defect slide (slide13)
+  { slide: 'ppt/slides/slide13.xml', rels: 'ppt/slides/_rels/slide13.xml.rels', imageFile: 'imageSourceDefect.png', workstream: 'Source', svgName: 'burndownSource.svg', title: 'Source Defect Burndown' },
 ];
 
 const toDate  = s => new Date(`${s}T00:00:00Z`);

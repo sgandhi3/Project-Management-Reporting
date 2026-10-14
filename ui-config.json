@@ -41,6 +41,14 @@
       "areaPath": "HRP\\Testing\\EDI",
       "projectKey": "",
       "testCycleKey": ""
+    },
+    {
+      "name": "Source",
+      "planId": "20140",
+      "sitSuiteId": "30873",
+      "areaPath": "HRP\\Testing\\Provider\\Source",
+      "projectKey": "",
+      "testCycleKey": ""
     }
   ],
   "variableMappings": [],

@@ -15,7 +15,7 @@ made to the 10/13 deck).
 - Revised PDM SIT target date is in discussion; keep `tbd: true` on SIT_SCHEDULE.PDM in config.js until confirmed (shows "(TBD)" and a sentence in the PDM status box).
 
 ## Enrollment
-- Missing members in the QA region are required to complete the test cases. Members expected by 10/12; execution expected to wrap by 10/16.
+- Missing members in the QA region are required to complete the test cases. Members expected by 10/12; execution expected to wrap by 10/23.
 
 ## Claims (EDI workstream)
 - Claims SIT is at risk and progressing slowly due to delays in test design and execution.

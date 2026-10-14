@@ -19,6 +19,7 @@ const TARGETS = [
   { token: 'BENETCSSTATUS', ws: 'Benefits' },
   { token: 'ENROTCSSTATUS', ws: 'Enrollment' },
   { token: 'EDITCSSTATUS',  ws: 'EDI' },
+  { token: 'SRCTCSSTATUS',  ws: 'Source' },
 ];
 
 // Benefits-only active-plan filter — mirrors variables.js's activeBenSum so

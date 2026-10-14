@@ -82,6 +82,13 @@ export async function generate(data) {
   }
 
   try {
+    const defectsDashboard = await import('./_defects-dashboard.js');
+    defectsDashboard.apply(zip, data, effectiveMap);
+  } catch (e) {
+    if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+  }
+
+  try {
     const tcsStatus = await import('./_tcs-status.js');
     tcsStatus.apply(zip, data, effectiveMap);
   } catch (e) {
@@ -91,7 +98,8 @@ export async function generate(data) {
   const replacements = {};
   for (const [key, getter] of Object.entries(effectiveMap)) {
     try {
-      replacements[`{{${key}}}`] = String(getter(data) ?? '');
+      // Escape XML specials — narrative text can contain '&' (e.g. "design & execution"), which would otherwise corrupt the slide XML.
+      replacements[`{{${key}}}`] = String(getter(data) ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     } catch {
       replacements[`{{${key}}}`] = '';
     }
