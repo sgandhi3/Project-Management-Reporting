@@ -100,8 +100,8 @@ export const ZEPHYR_STATUS_MAP = {
 export const SIT_SCHEDULE = {
   PDM:        { start: '2026-09-07', end: '2026-10-15', tbd: true }, // "Ready to Service Providers (PDM)" — tbd: revised date under discussion; PDM slide shows "(TBD)" until this flag is removed
   Benefits:   { start: '2026-06-22', end: '2026-11-27' }, // "Ready to Sell (Benefits)"
-  Enrollment: { start: '2026-07-15', end: '2026-10-15' }, // "Ready to Enroll (Enrollment)"
-  EDI:        { start: '2026-09-07', end: '2026-10-15' }, // EDI SIT — end date aligned to the other workstreams (start assumed = PDM's)
+  Enrollment: { start: '2026-07-15', end: '2026-10-23' }, // "Ready to Enroll (Enrollment)"
+  EDI:        { start: '2026-09-07', end: '2026-10-23' }, // EDI SIT — end date moved to 10/23 (report owner, 10/14); start assumed = PDM's
   Source:     { start: '2026-09-15', end: '2026-11-15', statusColor: '2E7D32' }, // Source SIT (ADO: Release 1.1 > Provider - Source > UAT, reported as SIT). statusColor: report owner declared Source On Track (green), so it overrides the pacing-derived color on the Planning Summary
 };
 

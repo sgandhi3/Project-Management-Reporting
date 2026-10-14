@@ -9,7 +9,7 @@
 //
 // Owner and Comments for the critical-defects table can't come from ADO (owner is a
 // person's name, which never goes in the deck), so they're maintained in
-// critical-defect-notes.json at the project root: { "<ADO id>": { owner, targetDate, comments } }.
+// critical-defect-notes.json at the project root: { "<ADO id>": { title, owner, targetDate, comments } }.
 // A critical defect with no entry still gets a row, with "TBD" cells.
 //
 // Runs in the early extension phase (see extensions/ppt.js), before the generic
@@ -137,6 +137,12 @@ function loadNotes() {
   try { return JSON.parse(fs.readFileSync(NOTES_PATH, 'utf8')); } catch { return {}; }
 }
 
+// Fallback when no short title is in the notes file: drop leading "[PDM-123] -" style tags.
+const cleanTitle = t => String(t ?? '').replace(/^\s*(\[[^\]]*\]\s*-?\s*)+/, '').replace(/^HRP\s+/i, '').trim();
+
+// Open date = ADO created date, shown as M/D to match the Target Date column.
+const fmtOpen = iso => { if (!iso) return 'TBD'; const d = toDate(iso); return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`; };
+
 function fillRows(xml, data) {
   const rows = xml.match(/<a:tr h="\d+">[\s\S]*?<\/a:tr>/g) || [];
   const tpl = rows.find(r => r.includes('{{CRITID}}'));
@@ -147,19 +153,19 @@ function fillRows(xml, data) {
   const shown = crit.slice(0, MAX_CRIT_ROWS);
   const out = shown.map(({ ws, b }, n) => {
     const note = notes[String(b.id)] || {};
-    const vals = { CRITWS: ws, CRITID: `#${b.id}`, CRITOWNER: note.owner || 'TBD', CRITTARGET: note.targetDate || 'TBD', CRITCOMMENT: note.comments || 'TBD' };
+    const vals = { CRITWS: ws, CRITID: `#${b.id}`, CRITTITLE: note.title || cleanTitle(b.title), CRITOWNER: note.owner || 'TBD', CRITOPEN: fmtOpen(b.createdDate), CRITTARGET: note.targetDate || 'TBD', CRITCOMMENT: note.comments || 'TBD' };
     let r = tpl;
     for (const [k, v] of Object.entries(vals)) r = r.split(`{{${k}}}`).join(esc(v));
     return r.replace(/(a16:rowId[^>]*val=")\d+"/, `$1${700000 + n}"`);
   });
   let body = out.join('');
   if (crit.length > shown.length) {
-    body += tpl.replace('{{CRITWS}}', '').replace('{{CRITID}}', '').replace('{{CRITOWNER}}', '').replace('{{CRITTARGET}}', '')
+    body += tpl.replace('{{CRITWS}}', '').replace('{{CRITID}}', '').replace('{{CRITTITLE}}', '').replace('{{CRITOWNER}}', '').replace('{{CRITOPEN}}', '').replace('{{CRITTARGET}}', '')
       .replace('{{CRITCOMMENT}}', esc(`+${crit.length - shown.length} more critical defect(s) not shown`))
       .replace(/(a16:rowId[^>]*val=")\d+"/, '$1799999"');
   }
   if (!shown.length) {
-    body = tpl.replace('{{CRITWS}}', '--').replace('{{CRITID}}', '--').replace('{{CRITOWNER}}', '--').replace('{{CRITTARGET}}', '--')
+    body = tpl.replace('{{CRITWS}}', '--').replace('{{CRITID}}', '--').replace('{{CRITTITLE}}', '--').replace('{{CRITOWNER}}', '--').replace('{{CRITOPEN}}', '--').replace('{{CRITTARGET}}', '--')
       .replace('{{CRITCOMMENT}}', 'No open critical (Sev 1) defects.');
   }
   return xml.replace(tpl, body);

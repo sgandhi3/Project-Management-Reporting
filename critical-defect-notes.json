@@ -1,17 +1,20 @@
 {
   "31417": {
+    "title": "Certify practitioner initial file load",
     "owner": "Certify",
     "targetDate": "10/16",
-    "comments": "Delegated and hospitalist rosters being ingested (ETA 10/14); sample to be provided for testing, then full load targeted for 10/16."
+    "comments": "Rosters are loading now. Testing next, full load by 10/16."
   },
   "31222": {
+    "title": "Claim missing attachment type code",
     "owner": "HE",
-    "targetDate": "TBD",
-    "comments": "HE reviewed: request omitted the required attachment type code tag, so the fix is in the sender payload. Awaiting final API documentation from HE."
+    "targetDate": "10/16",
+    "comments": "HE found a missing field in our file. Waiting on final API documentation."
   },
   "31546": {
+    "title": "COB policy not added after successful API response",
     "owner": "HE",
-    "targetDate": "TBD",
-    "comments": "HE supplied a corrected request; COB policies now add on a successful response. Pending final API documentation and MMO retest."
+    "targetDate": "10/16",
+    "comments": "HE sent a fix that works. Waiting on final API documentation and retest."
   }
 }
