@@ -5,7 +5,7 @@
 //
 // Config (via .env or CLI):
 //   PPTX_TEMPLATE — path to the source .pptx file (default: temp.pptx in project root)
-//   --out <path>  — where to write the output file (default: Report_YYYY-MM-DD.pptx)
+//   --out <path>  — where to write the output file (default: "SIT Execution & Defect Report - YYYY-MM-DD.pptx")
 //
 // To create a different output extension (e.g. Excel), copy this file, implement
 // the same generate(data) export, and set OUTPUT_FORMAT=excel in your .env.
@@ -23,7 +23,7 @@ const UI_CONFIG_PATH = path.join(__dirname2, '..', 'ui-config.json');
 const args      = process.argv.slice(2);
 const getArg    = flag => { const i = args.indexOf(flag); return i !== -1 ? args[i + 1] : null; };
 const TEMPLATE  = process.env.PPTX_TEMPLATE || path.join(process.cwd(), 'temp.pptx');
-const outputArg = getArg('--out') || path.join(process.cwd(), `Report_${new Date().toISOString().slice(0, 10)}.pptx`);
+const outputArg = getArg('--out') || path.join(process.cwd(), `SIT Execution & Defect Report - ${new Date().toISOString().slice(0, 10)}.pptx`);
 
 // PowerPoint sometimes splits a {{TOKEN}} across multiple XML text runs when
 // spell-check or a capital letter mid-token triggers a run break. This heals

@@ -343,6 +343,13 @@ export const VARIABLE_MAP = {
 
   // ── AI-refreshed narrative — 09/2026 template additions ───────────────────
   AI_DEFECT_TRIAGE:                d => d._aiNarratives?.defectTriage ?? '',
+  AI_ENROLLMENT_UPDATE:            d => d._aiNarratives?.enrollmentUpdate ?? '',
+  AI_CLAIMS_UPDATE:                d => d._aiNarratives?.claimsUpdate ?? '',
+  AI_PDM_BLOCKED_NOTE:             d => d._aiNarratives?.pdmBlockedNote ?? '',
+  // '****' footnote marker only when there is a blocked-cases note to point at
+  PDMBLOCKEDFN:                    d => d._aiNarratives?.pdmBlockedNote ? '****' : '',
+  // Shown next to the PDM SIT target date while the revised date is unconfirmed
+  PDMSITENDTBD:                    () => SIT_SCHEDULE.PDM?.tbd ? ' (TBD)' : '',
   AI_PDM_DEFECT_STATUS:            d => d._aiNarratives?.pdmDefectStatus ?? '',
   AI_PDM_DEFECT_INSIGHTS:          d => d._aiNarratives?.pdmDefectInsights ?? '',
   AI_PDM_BURNDOWN_INSIGHTS:        d => d._aiNarratives?.pdmBurndownInsights ?? '',
@@ -533,7 +540,26 @@ export const VARIABLE_MAP = {
       [`${prefix}TCSCOMMENTS`]:    () => '',
     });
 
+    // Overall expected execution % across the four SIT workstreams (sum of
+    // pacing-derived planned-to-date / sum of ADO SIT cases) — the "expected
+    // execution rate" quoted in the exec summary and under the planning table.
+    const WSS = ['PDM', 'Benefits', 'Enrollment', 'EDI'];
+    const expectedPct = d => {
+      const tot = WSS.reduce((a, ws) => a + adoTotal(d, ws), 0);
+      const pl  = WSS.reduce((a, ws) => a + planning(d, ws).planned, 0);
+      return tot ? Math.round((pl / tot) * 100) : 0;
+    };
+    const asOfShort = () => new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric' });
+
     return {
+      TCSEXPECTEDPCT: d => expectedPct(d),
+      TCSOVERALLNOTE: d => {
+        const behind = WSS.filter(ws => planning(d, ws).delta < 0).length;
+        const lead = behind === WSS.length ? 'Overall testing is behind for all workstreams.'
+                   : behind === 0 ? 'Overall testing is on or ahead of plan for all workstreams.'
+                   : `Overall testing is behind for ${behind} of ${WSS.length} workstreams.`;
+        return `${lead} SIT cases are expected to be ${expectedPct(d)}% executed as of ${asOfShort()}.`;
+      },
       ...tcsTokens('PDM',  'PDM'),
       ...tcsTokens('BENE', 'Benefits'),
       ...tcsTokens('ENRO', 'Enrollment'),

@@ -2,6 +2,8 @@ import './env.js';  // must be first — loads .env before config.js reads proce
 import fs from 'fs';
 import { WORKSTREAMS, QUERIES, SETTINGS, MANUAL_STAT_FLOORS } from './config.js';
 import { agingBuckets } from './extensions/_defect-aging.js';
+import { pdmDefectBucket, benefitsDefectPlan } from './extensions/_defect-classification.js';
+import { VARIABLE_MAP } from './variables.js';
 
 const PROVIDER = (process.env.TEST_PROVIDER || 'ado').toLowerCase();
 
@@ -300,7 +302,22 @@ async function main() {
       aging[ws] = agingBuckets(data.bugs[ws] || []);
     }
 
+    // Open-defect counts per PDM iteration bucket / Benefits plan, computed with
+    // the REAL classifier (same one filling the slide tables) so narrative
+    // sentences match the tables exactly instead of re-deriving by eye.
+    const tally = (arr, fn) => arr.reduce((m, b) => { const k = fn(b) ?? 'unclassified'; m[k] = (m[k] || 0) + 1; return m; }, {});
+    const bucketCounts = {
+      PDM:      { open: tally(data.bugs.PDM || [], pdmDefectBucket), closed: tally(data.closedBugs.PDM || [], pdmDefectBucket) },
+      Benefits: { open: tally(data.bugs.Benefits || [], benefitsDefectPlan), closed: tally(data.closedBugs.Benefits || [], benefitsDefectPlan) },
+    };
+    // User-maintained facts that can't come from ADO (blockers, expected dates).
+    let reportContext = null;
+    try { reportContext = fs.readFileSync('report-context.md', 'utf8'); } catch { /* optional */ }
+
     process.stdout.write('__NARRATIVE_DATA__' + JSON.stringify({
+      bucketCounts,
+      expectedExecutionPct: VARIABLE_MAP.TCSEXPECTEDPCT(data),
+      reportContext,
       stats: data.stats,
       subStats: data.subStats,
       consolidatedData: data.consolidatedData,

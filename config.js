@@ -98,7 +98,7 @@ export const ZEPHYR_STATUS_MAP = {
 //
 // Update this if a workstream's committed SIT window changes.
 export const SIT_SCHEDULE = {
-  PDM:        { start: '2026-09-07', end: '2026-10-15' }, // "Ready to Service Providers (PDM)"
+  PDM:        { start: '2026-09-07', end: '2026-10-15', tbd: true }, // "Ready to Service Providers (PDM)" — tbd: revised date under discussion; PDM slide shows "(TBD)" until this flag is removed
   Benefits:   { start: '2026-06-22', end: '2026-11-27' }, // "Ready to Sell (Benefits)"
   Enrollment: { start: '2026-07-15', end: '2026-10-15' }, // "Ready to Enroll (Enrollment)"
   EDI:        { start: '2026-09-07', end: '2026-10-15' }, // EDI SIT — end date aligned to the other workstreams (start assumed = PDM's)

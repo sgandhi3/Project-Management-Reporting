@@ -35,6 +35,18 @@
 // row, which will read wrong until someone edits it by hand.
 
 import { getExtraActiveBenefitPlans, getNotStartedBenefitsRow } from '../variables.js';
+import { benefitsDefectPlan, BENEFITS_PLAN_LABELS } from './_defect-classification.js';
+
+const FIXED_DEFECT_PLANS = new Set(['Signature HMO', 'Access PPO', 'Premium PPO', 'Classic HMO NEOH', 'MMEGWP PPO CWRU MAPD']);
+const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// The classifier label (e.g. "MMEGWP 3 Tier UH") matching an ADO suite plan
+// label (e.g. "Mmegwp 3tier Uh New"): same letters/digits ignoring case,
+// spacing and a trailing "New".
+function defectPlanForExecLabel(label) {
+  const n = norm(label);
+  return BENEFITS_PLAN_LABELS.find(l => n.includes(norm(l))) ?? null;
+}
 
 function extractRows(frameXml) {
   return [...frameXml.matchAll(/<a:tr h="\d+">[\s\S]*?<\/a:tr>/g)].map(m => m[0]);
@@ -110,7 +122,8 @@ function injectSlide5(xml, extraPlans, tokenMap, notStarted) {
     tokenMap[`${prefix}IPTC`] = () => plan.stats.inProgress;
     tokenMap[`${prefix}BTC`]  = () => plan.stats.blocked;
     tokenMap[`${prefix}NSTC`] = () => plan.stats.notStarted;
-    tokenMap[`${prefix}DEF`]  = () => 0;
+    const defPlan = defectPlanForExecLabel(plan.label);
+    tokenMap[`${prefix}DEF`]  = d => defPlan ? (d.bugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === defPlan).length : 0;
 
     newRowsXml += cloneRowWithTokens(templateRow, 'Classic HMO NEOH', plan.label, {
       '{{BENENEOHTTC}}':  `{{${prefix}TTC}}`,
@@ -189,6 +202,66 @@ function fitBenefitsSlide(xml) {
   return out;
 }
 
+// ── Benefits defect slide: per-plan defect table ─────────────────────────
+// Plans beyond the 5 fixed rows (e.g. MMEGWP 3 Tier UH) get their own row once
+// they have any defects. The table grows, so the severity/aging tables below
+// it shift down and the Key Insights box gives up the same height (its bottom
+// edge stays fixed). Measured against the 10/2026 template.
+const EMU_PX = 9525;
+
+function shapeBlock(xml, name) {
+  const re = new RegExp(`<p:(sp|graphicFrame)>(?:(?!</p:\\1>)[\\s\\S])*?name="${name}"[\\s\\S]*?</p:\\1>`);
+  const m = xml.match(re);
+  return m ? m[0] : null;
+}
+
+function shiftShape(xml, name, dy, dh = 0) {
+  const block = shapeBlock(xml, name);
+  if (!block) return xml;
+  const nb = block.replace(/(<(?:a|p):xfrm[^>]*><a:off x="\d+" y=")(\d+)("\/><a:ext cx="\d+" cy=")(\d+)/,
+    (_m, a, y, b, cy) => `${a}${parseInt(y) + dy}${b}${parseInt(cy) + dh}`);
+  return xml.replace(block, nb);
+}
+
+function injectDefectSlide(xml, extraLabels, tokenMap) {
+  const anchor = xml.indexOf('MMEGWP PPO CWRU MAPD');
+  if (anchor < 0 || !extraLabels.length) return xml;
+  const gfStart = xml.lastIndexOf('<p:graphicFrame>', anchor);
+  const gfEnd = xml.indexOf('</p:graphicFrame>', anchor) + '</p:graphicFrame>'.length;
+  let frame = xml.slice(gfStart, gfEnd);
+  const rows = extractRows(frame);
+  const templateRow = rows.find(r => r.includes('MMEGWP PPO CWRU MAPD'));
+  const totalRow = rows.find(r => r.includes('>TOTAL<'));
+  if (!templateRow || !totalRow) {
+    console.warn('  ⚠  _dynamic-benefits: defect table template/TOTAL row not found — skipping defect row injection');
+    return xml;
+  }
+  let newRows = '';
+  extraLabels.forEach((label, i) => {
+    const p = `DYNDEF${i}`;
+    tokenMap[`${p}TOTAL`]    = d => [...(d.bugs?.Benefits ?? []), ...(d.closedBugs?.Benefits ?? [])].filter(b => benefitsDefectPlan(b) === label).length;
+    tokenMap[`${p}OPEN`]     = d => (d.bugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === label).length;
+    tokenMap[`${p}CLOSED`]   = d => (d.closedBugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === label && b.state === 'Closed').length;
+    tokenMap[`${p}RESOLVED`] = d => (d.closedBugs?.Benefits ?? []).filter(b => benefitsDefectPlan(b) === label && b.state === 'Resolved').length;
+    newRows += cloneRowWithTokens(templateRow, 'MMEGWP PPO CWRU MAPD', label, {
+      '{{BENEMMEGWPDEFTOTAL}}':    `{{${p}TOTAL}}`,
+      '{{BENEMMEGWPDEFOPEN}}':     `{{${p}OPEN}}`,
+      '{{BENEMMEGWPDEFCLOSED}}':   `{{${p}CLOSED}}`,
+      '{{BENEMMEGWPDEFRESOLVED}}': `{{${p}RESOLVED}}`,
+    });
+  });
+  const added = rowHeight(templateRow) * extraLabels.length;
+  frame = frame.slice(0, frame.indexOf(totalRow)) + newRows + frame.slice(frame.indexOf(totalRow));
+  frame = growExtent(frame, added);
+  let out = xml.slice(0, gfStart) + frame + xml.slice(gfEnd);
+
+  const shift = Math.max(0, added - 10 * EMU_PX * extraLabels.length);
+  out = shiftShape(out, 'SeverityTable', shift);
+  out = shiftShape(out, 'AgingTable', shift);
+  out = shiftShape(out, 'NarrLeft', shift - 7 * EMU_PX * extraLabels.length, -(shift - 7 * EMU_PX * extraLabels.length));
+  return out;
+}
+
 // Mutates zip's slide5.xml in place and adds any new per-plan token getters
 // into effectiveMap. No-op if no plan outside the 5 fixed rows has started
 // executing yet.
@@ -197,6 +270,17 @@ export function apply(zip, data, effectiveMap) {
   const notStarted = getNotStartedBenefitsRow(data);
   const slide5 = injectSlide5(zip.file('ppt/slides/slide5.xml').asText(), extraPlans, effectiveMap, notStarted.planned > 0 ? notStarted : null);
   zip.file('ppt/slides/slide5.xml', slide5);
+
+  // Benefits defect slide (slide6.xml): one extra row per plan beyond the 5 fixed ones
+  const defFile = zip.file('ppt/slides/slide6.xml');
+  if (defFile && defFile.asText().includes('Testing Defect Summary by Severity')) {
+    const all = [...(data.bugs?.Benefits ?? []), ...(data.closedBugs?.Benefits ?? [])];
+    const extraLabels = BENEFITS_PLAN_LABELS.filter(l => !FIXED_DEFECT_PLANS.has(l) && all.some(b => benefitsDefectPlan(b) === l));
+    if (extraLabels.length) {
+      zip.file('ppt/slides/slide6.xml', injectDefectSlide(defFile.asText(), extraLabels, effectiveMap));
+      console.log(`  Dynamic Benefits defect rows: added ${extraLabels.join(', ')}`);
+    }
+  }
 
   console.log(`  Dynamic Benefits rows: added ${extraPlans.length} plan(s) — ${extraPlans.map(p => p.label).join(', ')}${notStarted.planned > 0 ? ` + Not Started row (${notStarted.planned})` : ''}`);
 }

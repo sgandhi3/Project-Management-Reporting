@@ -32,12 +32,15 @@ export function pdmDefectBucket(bug) {
 // test case on another plan for comparison) resolves deterministically
 // instead of being left ambiguous.
 const BENEFITS_PLAN_PATTERNS = [
+  ['MMEGWP 3 Tier UH',    /3\s*tier/i],
   ['MMEGWP PPO CWRU MAPD', /cwru/i],
   ['Classic HMO NEOH',     /classic\s*hmo|neoh/i],
   ['Signature HMO',        /signature/i],
   ['Access PPO',           /access\s*ppo|premium\s*ppo\s*inn|ppo\s*inn/i],
   ['Premium PPO',          /premium\s*ppo/i],
 ];
+
+export const BENEFITS_PLAN_LABELS = BENEFITS_PLAN_PATTERNS.map(([label]) => label);
 
 export function benefitsDefectPlan(bug) {
   const title = bug.title || '';

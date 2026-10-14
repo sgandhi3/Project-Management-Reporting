@@ -30,6 +30,10 @@ const NARRATIVE_KEYS = [
   'pdmDataMappingDetail',
   // 09/2026 template additions
   'defectTriage',
+  // 10/2026 template: Enrollment/Claims exec-summary bullets + PDM blocked-cases footnote
+  'enrollmentUpdate',
+  'claimsUpdate',
+  'pdmBlockedNote',
   'pdmDefectStatus',
   'pdmDefectInsights',
   'pdmBurndownInsights',
